@@ -17,7 +17,12 @@ const {
   inferInputObjectStructureFromNodes,
 } = require(`./infer-graphql-input-fields`)
 const { nodeInterface } = require(`./node-interface`)
-const { getNodes, getNode, getNodeAndSavePathDependency } = require(`../redux`)
+const {
+  getNodes,
+  getNode,
+  getNodeAndSavePathDependency,
+  pluginFieldTracking,
+} = require(`../redux`)
 const { createPageDependency } = require(`../redux/actions/add-page-dependency`)
 const { setFileNodeRootType } = require(`./types/type-file`)
 const { clearTypeExampleValues } = require(`./data-tree-utils`)
@@ -158,6 +163,13 @@ module.exports = async ({ parentSpan }) => {
 
     const inferredInputFieldsFromPlugins = inferInputObjectStructureFromFields({
       fields: mergedFieldsFromPlugins,
+    })
+
+    const inferredFieldNames = _.keys(
+      inferredInputFieldsFromPlugins.inferredFields
+    )
+    _.forEach(inferredFieldNames, fieldName => {
+      pluginFieldTracking.add(fieldName)
     })
 
     const gqlType = new GraphQLObjectType({

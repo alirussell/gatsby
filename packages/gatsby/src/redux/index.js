@@ -11,6 +11,9 @@ const emitter = mitt()
 // Reducers
 const reducers = require(`./reducers`)
 
+// Hack to track pluginFields
+exports.pluginFieldTracking = new Set()
+
 const objectToMap = obj => {
   let map = new Map()
   Object.keys(obj).forEach(key => {

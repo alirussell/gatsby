@@ -6,7 +6,7 @@ const { createPageDependency } = require(`../redux/actions/add-page-dependency`)
 const prepareRegex = require(`./prepare-regex`)
 const Promise = require(`bluebird`)
 const { trackInlineObjectsInRootNode } = require(`./node-tracking`)
-const { getNode } = require(`../redux`)
+const { getNode, pluginFieldTracking } = require(`../redux`)
 
 const resolvedNodesCache = new Map()
 const enhancedNodeCache = new Map()
@@ -36,6 +36,11 @@ function awaitSiftField(fields, node, k) {
   }
 
   return undefined
+}
+
+function hasPluginFields(args) {
+  const argFields = _.keys(args.filter)
+  return _.some(argFields, field => pluginFieldTracking.has(field))
 }
 
 /*
@@ -166,6 +171,10 @@ module.exports = ({
   }
 
   const nodesPromise = () => {
+    // if (!hasPluginFields(args)) {
+    //   return Promise.resolve(nodes)
+    // }
+
     const nodesCacheKey = JSON.stringify({
       // typeName + count being the same is a pretty good
       // indication that the nodes are the same.
