@@ -19,7 +19,7 @@ function discoverPluginsWithoutNodes(storeState) {
   )
   // Find out which plugins own already created nodes
   const nodeOwners = _.uniq(
-    Array.from(storeState.nodes.values()).reduce((acc, node) => {
+    Array.from(getNodes()).reduce((acc, node) => {
       acc.push(node.internal.owner)
       return acc
     }, [])
