@@ -64,28 +64,24 @@ module.exports = (state = new Map(), action) => {
       } else {
         createNode(action.payload)
       }
-      state.set(action.payload.id, action.payload)
-      return state
+      return new Map()
     }
 
     case `ADD_FIELD_TO_NODE`:
     case `ADD_CHILD_NODE_TO_PARENT_NODE`:
       updateNode(action.payload)
-      state.set(action.payload.id, action.payload)
-      return state
+      return new Map()
 
     case `DELETE_NODE`: {
       deleteNode(action.payload)
-      state.delete(action.payload.id)
-      return state
+      return new Map()
     }
 
     case `DELETE_NODES`: {
-      action.payload.forEach(id => state.delete(id))
-      return state
+      return new Map()
     }
 
     default:
-      return state
+      return new Map()
   }
 }
