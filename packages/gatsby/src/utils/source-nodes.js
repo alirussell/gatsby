@@ -2,7 +2,8 @@ const _ = require(`lodash`)
 const report = require(`gatsby-cli/lib/reporter`)
 
 const apiRunner = require(`./api-runner-node`)
-const { store, getNode } = require(`../redux`)
+const { store } = require(`../redux`)
+const { getNode, getNodes } = require(`../db`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deleteNode } = boundActionCreators
 
@@ -45,7 +46,8 @@ module.exports = async ({ parentSpan } = {}) => {
 
   // Garbage collect stale data nodes
   const touchedNodes = Object.keys(state.nodesTouched)
-  const staleNodes = Array.from(state.nodes.values()).filter(node => {
+  const nodes = getNodes()
+  const staleNodes = Array.from(nodes).filter(node => {
     // Find the root node.
     let rootNode = node
     let whileCount = 0

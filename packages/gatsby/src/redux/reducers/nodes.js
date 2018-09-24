@@ -12,10 +12,10 @@ function createNode(node) {
   let coll = db.db.getCollection(type)
   if (!coll) {
     console.log(`${type} collection doesn't exist. Creating`)
-    coll = db.db.addCollection(type, { indices: [`id`] })
+    coll = db.db.addCollection(type, { unique: [`id`], indices: [`id`] })
   }
 
-  coll.insert(node)
+  return coll.insert(node)
 }
 
 function deleteNode(node) {
@@ -33,7 +33,7 @@ function deleteNode(node) {
   coll.remove(node)
 }
 
-function updateNode(node) {
+function updateNode(node, oldNode) {
   invariant(node.internal, `node has no "internal" field`)
   invariant(node.internal.type, `node has no "internal.type" field`)
   invariant(node.id, `node has no "id" field`)
@@ -45,7 +45,12 @@ function updateNode(node) {
     invariant(coll, `${type} collection doesn't exist. When trying to update?`)
   }
 
-  coll.update(node)
+  if (!oldNode) {
+    oldNode = db.getNode(node.id)
+  }
+  const updateNode = _.merge(oldNode, node)
+
+  coll.update(updateNode)
 }
 
 module.exports = (state = new Map(), action) => {
@@ -54,8 +59,11 @@ module.exports = (state = new Map(), action) => {
       db.clearAll()
       return new Map()
     case `CREATE_NODE`: {
-      console.log(`create_node`)
-      createNode(action.payload)
+      if (action.oldNode) {
+        updateNode(action.payload, action.oldNode)
+      } else {
+        createNode(action.payload)
+      }
       state.set(action.payload.id, action.payload)
       return state
     }

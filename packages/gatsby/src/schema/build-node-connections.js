@@ -10,7 +10,7 @@ const {
 } = require(`./infer-graphql-input-fields-from-fields`)
 const createSortField = require(`./create-sort-field`)
 const buildConnectionFields = require(`./build-connection-fields`)
-const { getNodes } = require(`../redux`)
+const { getNodes } = require(`../db`)
 
 module.exports = (types: any) => {
   const connections = {}

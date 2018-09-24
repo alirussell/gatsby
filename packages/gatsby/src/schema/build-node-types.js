@@ -20,9 +20,10 @@ const { nodeInterface } = require(`./node-interface`)
 const {
   getNodes,
   getNode,
+  getNodeGroups,
   getNodeAndSavePathDependency,
-  pluginFieldTracking,
-} = require(`../redux`)
+} = require(`../db`)
+const { pluginFieldTracking } = require(`../redux`)
 const { createPageDependency } = require(`../redux/actions/add-page-dependency`)
 const { setFileNodeRootType } = require(`./types/type-file`)
 const { clearTypeExampleValues } = require(`./data-tree-utils`)
@@ -39,10 +40,8 @@ module.exports = async ({ parentSpan }) => {
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
   const span = tracer.startSpan(`build schema`, spanArgs)
 
-  const types = _.groupBy(
-    getNodes().filter(node => node.internal && !node.internal.ignoreType),
-    node => node.internal.type
-  )
+  const types = getNodeGroups()
+
   const processedTypes: TypeMap = {}
 
   clearTypeExampleValues()
@@ -74,6 +73,7 @@ module.exports = async ({ parentSpan }) => {
 
     // Create children fields for each type of children e.g.
     // "childrenMarkdownRemark".
+
     const childNodesByType = _(type.nodes)
       .flatMap(({ children }) => children.map(getNode))
       .groupBy(

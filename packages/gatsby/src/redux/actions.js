@@ -8,7 +8,7 @@ const report = require(`gatsby-cli/lib/reporter`)
 const path = require(`path`)
 const fs = require(`fs`)
 const kebabHash = require(`kebab-hash`)
-const { hasNodeChanged, getNode } = require(`./index`)
+const { hasNodeChanged, getNode } = require(`../db`)
 const { trackInlineObjectsInRootNode } = require(`../schema/node-tracking`)
 const { store } = require(`./index`)
 const fileExistsSync = require(`fs-exists-cached`).sync
@@ -612,6 +612,7 @@ actions.createNode = (
       type: `CREATE_NODE`,
       plugin,
       ...actionOptions,
+      oldNode,
       payload: node,
     }
   }
