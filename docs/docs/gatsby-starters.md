@@ -942,7 +942,7 @@ There are several starters that have been created. Create a PR to include yours!
 
   - Built upon gatsby-starter-default
   - Perfect if you want to use Typescript and SASS but don't want any extra code
-  
+
 - [gatsby-starter-mate](https://github.com/EmaSuriano/gatsby-starter-mate)
   [(demo)](https://gatsby-starter-mate.netlify.com/)
 
@@ -977,3 +977,39 @@ There are several starters that have been created. Create a PR to include yours!
   - ESLint
   - Prettier code styling
   - Webpack , babel and deploy configured to eliminate heap crash during build and support for generator functions
+
+- [gatsby-starter-craft](https://github.com/magicspon/gatsby-starter-craftcms)
+
+  Features:
+
+  - Craftcms as a backend
+  - Tailwind
+  - Page transitions with Pose
+  - CSS in JS via emotion
+  - Remove unused CSS with purgecss
+  - Rematch store
+  - Offline
+  - Manifest
+  - Fork of gatsby-image to work with [craft-imageoptimizer](https://github.com/nystudio107/craft-imageoptimize)
+  - Sitemap (integrated with Craftcms)
+  - SVG Symbols
+
+- [gatsby-mdx-blog-starter-project](https://github.com/rwieruch/gatsby-mdx-blog-starter-project)
+
+  Features:
+
+  - MDX: JavaScript/React in Markdown
+  - Prism.js: Syntax Highlighting
+  - Pagination
+  - Category Pages
+  
+- [gatsby-mdx-starter](https://github.com/gatsby-mdx-starter/gatsby-mdx-starter)
+
+  Features:
+  
+  - Blog Oriented
+  - [MDX](https://github.com/mdx-js/mdx): Markdown + React Components
+  - [React Live](https://github.com/FormidableLabs/react-live): Playground for live editing React components (optional)
+  - Mobile friendly
+  - [Styled Components](https://github.com/styled-components/styled-components): css-in-js
+  
