@@ -1,6 +1,6 @@
 // Invoke plugins for certain actions.
 
-const { store, emitter } = require(`./index`)
+const { emitter } = require(`./index`)
 const { getNode } = require(`../db`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
 
