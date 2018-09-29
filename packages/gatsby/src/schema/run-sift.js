@@ -7,7 +7,7 @@ const prepareRegex = require(`./prepare-regex`)
 const Promise = require(`bluebird`)
 const { trackInlineObjectsInRootNode } = require(`./node-tracking`)
 const { pluginFieldTracking } = require(`../redux`)
-const { getNode } = require(`../db`)
+const { getNode, db } = require(`../db`)
 
 const resolvedNodesCache = new Map()
 const enhancedNodeCache = new Map()
@@ -39,10 +39,109 @@ function awaitSiftField(fields, node, k) {
   return undefined
 }
 
+/////////////////////////////////////////////////////////////////////
+// New Loki stuff
+/////////////////////////////////////////////////////////////////////
+
 function hasPluginFields(args) {
   const argFields = _.keys(args.filter)
   return _.some(argFields, field => pluginFieldTracking.has(field))
 }
+
+function toSortFields(sortArgs) {
+  const { fields, order } = sortArgs
+  return _(fields)
+    .map(field => [field.replace(/___/g, `.`), sortArgs === `desc`])
+    .values()
+}
+
+function _lokiArgsFlatten(o, path) {
+  if (_.isPlainObject(o)) {
+    if (_.isPlainObject(_.sample(o))) {
+      return _.flatMap(o, (v, k) => {
+        return _lokiArgsFlatten(v, path + `.` + k)
+      })
+    } else {
+      return { [_.trimStart(path, `.`)]: o }
+    }
+  }
+}
+
+function lokiArgsFlatten(o) {
+  const paths = _lokiArgsFlatten(o, ``)
+  return _.reduce(paths, (acc, e) => _.merge(acc, e), {})
+}
+
+function createConnection(lokiResult, queryArgs) {
+  const { skip, limit } = queryArgs
+  const connectionArgs = {}
+  if (skip && skip > 0) {
+    connectionArgs.skip = 1
+  }
+  if (limit) {
+    connectionArgs.limit = limit
+  }
+  return connectionFromArray(lokiResult, connectionArgs)
+}
+
+function execConnection(coll, mongoQuery, queryArgs, path) {
+  const { sort, skip, limit } = queryArgs
+  let chain = coll.chain()
+
+  chain = chain.find(mongoQuery)
+
+  if (sort) {
+    chain = chain.compoundsort(toSortFields(sort))
+  }
+
+  if (skip && skip > 0) {
+    chain = chain.offset(skip)
+  }
+
+  if (limit) {
+    chain = chain.limit(limit + 1)
+  }
+
+  const lokiResult = chain.data()
+
+  if (lokiResult.length === 0) return null
+
+  const connection = createConnection(lokiResult, queryArgs)
+  connection.totalCount = connection.edges.length
+
+  if (connection.totalCount > 0) {
+    createPageDependency({
+      path,
+      connection: connection.edges[0].node.internal.type,
+    })
+  }
+
+  return connection
+}
+
+function execSingle(coll, mongoQuery, path) {
+  try {
+    const lokiResult = coll.findOne(mongoQuery)
+
+    if (!lokiResult) return null
+
+    createPageDependency({
+      path,
+      nodeId: lokiResult.id,
+    })
+
+    return lokiResult
+  } catch (e) {
+    console.log(`Error in exec single`)
+    console.log(e)
+  }
+
+  return null
+}
+
+/////////////////////////////////////////////////////////////////////
+// End Loki stuff
+/////////////////////////////////////////////////////////////////////
 
 /*
  * Filters a list of nodes using mongodb-like syntax.
@@ -149,135 +248,158 @@ module.exports = ({
     })
   }
 
-  // If the the query only has a filter for an "id", then we'll just grab
-  // that ID and return it.
-  if (
-    Object.keys(fieldsToSift).length === 1 &&
-    Object.keys(fieldsToSift)[0] === `id`
-  ) {
-    const node = resolveRecursive(
-      getNode(siftArgs[0].id[`$eq`]),
-      fieldsToSift,
-      type.getFields()
-    )
+  if (hasPluginFields(args)) {
+    console.log(`in old query`)
 
-    if (node) {
-      createPageDependency({
-        path,
-        nodeId: node.id,
-      })
-    }
-
-    return node
-  }
-
-  const nodesPromise = () => {
-    // if (!hasPluginFields(args)) {
-    //   return Promise.resolve(nodes)
-    // }
-
-    const nodesCacheKey = JSON.stringify({
-      // typeName + count being the same is a pretty good
-      // indication that the nodes are the same.
-      typeName,
-      nodesLength: nodes.length,
-      ...fieldsToSift,
-    })
+    // If the the query only has a filter for an "id", then we'll just grab
+    // that ID and return it.
     if (
-      process.env.NODE_ENV === `production` &&
-      resolvedNodesCache.has(nodesCacheKey)
+      Object.keys(fieldsToSift).length === 1 &&
+      Object.keys(fieldsToSift)[0] === `id`
     ) {
-      return Promise.resolve(resolvedNodesCache.get(nodesCacheKey))
-    } else {
-      return Promise.all(
-        nodes.map(node => {
-          const cacheKey = enhancedNodeCacheId({
-            node,
-            args: fieldsToSift,
-          })
-          if (cacheKey && enhancedNodeCache.has(cacheKey)) {
-            return Promise.resolve(enhancedNodeCache.get(cacheKey))
-          } else if (cacheKey && enhancedNodePromiseCache.has(cacheKey)) {
-            return enhancedNodePromiseCache.get(cacheKey)
-          }
+      const node = resolveRecursive(
+        getNode(siftArgs[0].id[`$eq`]),
+        fieldsToSift,
+        type.getFields()
+      )
 
-          const enhancedNodeGenerationPromise = new Promise(resolve => {
-            resolveRecursive(node, fieldsToSift, type.getFields()).then(
-              resolvedNode => {
-                trackInlineObjectsInRootNode(resolvedNode)
-                if (cacheKey) {
-                  enhancedNodeCache.set(cacheKey, resolvedNode)
-                }
-                resolve(resolvedNode)
-              }
-            )
-          })
-          enhancedNodePromiseCache.set(cacheKey, enhancedNodeGenerationPromise)
-          return enhancedNodeGenerationPromise
+      if (node) {
+        createPageDependency({
+          path,
+          nodeId: node.id,
         })
-      ).then(resolvedNodes => {
-        resolvedNodesCache.set(nodesCacheKey, resolvedNodes)
-        return resolvedNodes
-      })
+      }
+
+      return node
     }
-  }
-  const tempPromise = nodesPromise().then(myNodes => {
-    if (!connection) {
-      const index = _.isEmpty(siftArgs)
-        ? 0
-        : sift.indexOf(
+
+    const nodesPromise = () => {
+      const nodesCacheKey = JSON.stringify({
+        // typeName + count being the same is a pretty good
+        // indication that the nodes are the same.
+        typeName,
+        nodesLength: nodes.length,
+        ...fieldsToSift,
+      })
+      if (
+        process.env.NODE_ENV === `production` &&
+        resolvedNodesCache.has(nodesCacheKey)
+      ) {
+        return Promise.resolve(resolvedNodesCache.get(nodesCacheKey))
+      } else {
+        return Promise.all(
+          nodes.map(node => {
+            const cacheKey = enhancedNodeCacheId({
+              node,
+              args: fieldsToSift,
+            })
+            if (cacheKey && enhancedNodeCache.has(cacheKey)) {
+              return Promise.resolve(enhancedNodeCache.get(cacheKey))
+            } else if (cacheKey && enhancedNodePromiseCache.has(cacheKey)) {
+              return enhancedNodePromiseCache.get(cacheKey)
+            }
+
+            const enhancedNodeGenerationPromise = new Promise(resolve => {
+              resolveRecursive(node, fieldsToSift, type.getFields()).then(
+                resolvedNode => {
+                  trackInlineObjectsInRootNode(resolvedNode)
+                  if (cacheKey) {
+                    enhancedNodeCache.set(cacheKey, resolvedNode)
+                  }
+                  resolve(resolvedNode)
+                }
+              )
+            })
+            enhancedNodePromiseCache.set(
+              cacheKey,
+              enhancedNodeGenerationPromise
+            )
+            return enhancedNodeGenerationPromise
+          })
+        ).then(resolvedNodes => {
+          resolvedNodesCache.set(nodesCacheKey, resolvedNodes)
+          return resolvedNodes
+        })
+      }
+    }
+    const tempPromise = nodesPromise().then(myNodes => {
+      if (!connection) {
+        const index = _.isEmpty(siftArgs)
+          ? 0
+          : sift.indexOf(
+              {
+                $and: siftArgs,
+              },
+              myNodes
+            )
+
+        // If a node is found, create a dependency between the resulting node and
+        // the path.
+        if (index !== -1) {
+          createPageDependency({
+            path,
+            nodeId: myNodes[index].id,
+          })
+
+          return myNodes[index]
+        } else {
+          return null
+        }
+      }
+
+      let result = _.isEmpty(siftArgs)
+        ? myNodes
+        : sift(
             {
               $and: siftArgs,
             },
             myNodes
           )
 
-      // If a node is found, create a dependency between the resulting node and
-      // the path.
-      if (index !== -1) {
+      if (!result || !result.length) return null
+
+      // Sort results.
+      if (clonedArgs.sort) {
+        // create functions that return the item to compare on
+        // uses _.get so nested fields can be retrieved
+        const convertedFields = clonedArgs.sort.fields
+          .map(field => field.replace(/___/g, `.`))
+          .map(field => v => _.get(v, field))
+
+        result = _.orderBy(result, convertedFields, clonedArgs.sort.order)
+      }
+
+      const connectionArray = connectionFromArray(result, args)
+      connectionArray.totalCount = result.length
+      if (result.length > 0 && result[0].internal) {
         createPageDependency({
           path,
-          nodeId: myNodes[index].id,
+          connection: result[0].internal.type,
         })
-
-        return myNodes[index]
-      } else {
-        return null
       }
+      return connectionArray
+    })
+
+    return tempPromise
+  } else {
+    // No Plugin fields. Run loki directly
+
+    console.log(`no plugin filter, ${type.name}`)
+
+    const coll = db.getCollection(type.name)
+    const preArgs = _.reduce(siftArgs, (acc, e) => _.merge(acc, e), {})
+    const lokiArgs = _lokiArgsFlatten(preArgs, ``)
+    const findArgs = { $and: lokiArgs }
+    let result
+
+    if (connection) {
+      console.log(`connection`)
+      // Handle connection (e.g allMarkdownRemark)
+      return execConnection(coll, findArgs, clonedArgs, path)
+    } else {
+      console.log(`not connection`)
+      // Handle single (e.g markdownRemark)
+      return execSingle(coll, findArgs, path)
     }
-
-    let result = _.isEmpty(siftArgs)
-      ? myNodes
-      : sift(
-          {
-            $and: siftArgs,
-          },
-          myNodes
-        )
-
-    if (!result || !result.length) return null
-
-    // Sort results.
-    if (clonedArgs.sort) {
-      // create functions that return the item to compare on
-      // uses _.get so nested fields can be retrieved
-      const convertedFields = clonedArgs.sort.fields
-        .map(field => field.replace(/___/g, `.`))
-        .map(field => v => _.get(v, field))
-
-      result = _.orderBy(result, convertedFields, clonedArgs.sort.order)
-    }
-
-    const connectionArray = connectionFromArray(result, args)
-    connectionArray.totalCount = result.length
-    if (result.length > 0 && result[0].internal) {
-      createPageDependency({
-        path,
-        connection: result[0].internal.type,
-      })
-    }
-    return connectionArray
-  })
-
-  return tempPromise
+  }
 }
