@@ -120,23 +120,16 @@ function execConnection(coll, mongoQuery, queryArgs, path) {
 }
 
 function execSingle(coll, mongoQuery, path) {
-  try {
-    const lokiResult = coll.findOne(mongoQuery)
+  const lokiResult = coll.findOne(mongoQuery)
 
-    if (!lokiResult) return null
+  if (!lokiResult) return null
 
-    createPageDependency({
-      path,
-      nodeId: lokiResult.id,
-    })
+  createPageDependency({
+    path,
+    nodeId: lokiResult.id,
+  })
 
-    return lokiResult
-  } catch (e) {
-    console.log(`Error in exec single`)
-    console.log(e)
-  }
-
-  return null
+  return lokiResult
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -176,6 +169,12 @@ module.exports = ({
           const Minimatch = require(`minimatch`).Minimatch
           const mm = new Minimatch(v)
           newObject[`$regex`] = mm.makeRe()
+        } else if (k === `ne` && v === true) {
+          newObject[`$where`] = a => a === undefined || a === false
+        } else if (k === `ne` && v === null) {
+          newObject[`$where`] = a => a !== undefined
+        } else if (k === `in`) {
+          newObject[`$contains`] = v
         } else {
           newObject[`$${k}`] = v
         }
@@ -249,8 +248,6 @@ module.exports = ({
   }
 
   if (hasPluginFields(args)) {
-    console.log(`in old query`)
-
     // If the the query only has a filter for an "id", then we'll just grab
     // that ID and return it.
     if (
@@ -382,24 +379,25 @@ module.exports = ({
 
     return tempPromise
   } else {
-    // No Plugin fields. Run loki directly
+    try {
+      // No Plugin fields. Run loki directly
 
-    console.log(`no plugin filter, ${type.name}`)
+      const coll = db.getCollection(type.name)
+      const preArgs = _.reduce(siftArgs, (acc, e) => _.merge(acc, e), {})
+      const lokiArgs = _lokiArgsFlatten(preArgs, ``)
 
-    const coll = db.getCollection(type.name)
-    const preArgs = _.reduce(siftArgs, (acc, e) => _.merge(acc, e), {})
-    const lokiArgs = _lokiArgsFlatten(preArgs, ``)
-    const findArgs = { $and: lokiArgs }
-    let result
+      const findArgs = { $and: lokiArgs }
+      let result
 
-    if (connection) {
-      console.log(`connection`)
-      // Handle connection (e.g allMarkdownRemark)
-      return execConnection(coll, findArgs, clonedArgs, path)
-    } else {
-      console.log(`not connection`)
-      // Handle single (e.g markdownRemark)
-      return execSingle(coll, findArgs, path)
+      if (connection) {
+        // Handle connection (e.g allMarkdownRemark)
+        return execConnection(coll, findArgs, clonedArgs, path)
+      } else {
+        // Handle single (e.g markdownRemark)
+        return execSingle(coll, findArgs, path)
+      }
+    } catch (e) {
+      console.log(e)
     }
   }
 }

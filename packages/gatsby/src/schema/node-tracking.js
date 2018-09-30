@@ -32,9 +32,10 @@ const addRootNodeToInlineObject = (data, nodeId) => {
 const trackInlineObjectsInRootNode = node => {
   _.each(node, (v, k) => {
     // Ignore the node internal object.
-    if (k === `internal`) {
+    if (k === `internal` || k === `$loki`) {
       return
     }
+
     addRootNodeToInlineObject(v, node.id)
   })
 
@@ -57,7 +58,9 @@ const findRootNodeAncestor = (obj, predicate = null) => {
   while (
     (!predicate || !predicate(rootNode)) &&
     (rootNodeId = getRootNodeId(rootNode) || rootNode.parent) &&
-    (getNode(rootNode.parent) !== undefined || getNode(rootNodeId)) &&
+    ((rootNode.parent !== undefined &&
+      getNode(rootNode.parent) !== undefined) ||
+      getNode(rootNodeId)) &&
     whileCount < 101
   ) {
     if (rootNodeId) {

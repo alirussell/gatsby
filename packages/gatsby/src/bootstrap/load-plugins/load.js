@@ -135,7 +135,7 @@ module.exports = (config = {}) => {
   const internalPlugins = [
     `../../internal-plugins/dev-404-page`,
     `../../internal-plugins/load-babel-config`,
-    `../../internal-plugins/internal-data-bridge`,
+    //    `../../internal-plugins/internal-data-bridge`,
     `../../internal-plugins/prod-404`,
     `../../internal-plugins/query-runner`,
   ]
