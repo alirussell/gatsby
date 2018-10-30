@@ -1,5 +1,5 @@
 const _ = require(`lodash`)
-const { getNode, getNodes } = require(`../db/nodes`)
+const { getNode, getNodes } = require(`./nodes`)
 
 /**
  * Map containing links between inline objects or arrays
@@ -32,7 +32,7 @@ const addRootNodeToInlineObject = (data, nodeId) => {
 const trackInlineObjectsInRootNode = node => {
   _.each(node, (v, k) => {
     // Ignore the node internal object.
-    if (k === `internal`) {
+    if (k === `internal` || k === `$loki`) {
       return
     }
     addRootNodeToInlineObject(v, node.id)
@@ -57,7 +57,9 @@ const findRootNodeAncestor = (obj, predicate = null) => {
   while (
     (!predicate || !predicate(rootNode)) &&
     (rootNodeId = getRootNodeId(rootNode) || rootNode.parent) &&
-    (getNode(rootNode.parent) !== undefined || getNode(rootNodeId)) &&
+    ((rootNode.parent !== undefined &&
+      getNode(rootNode.parent) !== undefined) ||
+      getNode(rootNodeId)) &&
     whileCount < 101
   ) {
     if (rootNodeId) {
@@ -77,14 +79,15 @@ const findRootNodeAncestor = (obj, predicate = null) => {
   return !predicate || predicate(rootNode) ? rootNode : null
 }
 
+function trackDbNodes() {
+  _.each(getNodes(), node => {
+    trackInlineObjectsInRootNode(node)
+  })
+}
+
 /**
  * @callback nodePredicate
  * @param {Node} node Node that is examined
  */
-
 exports.findRootNodeAncestor = findRootNodeAncestor
-
-// Track nodes that are already in store
-_.each(getNodes(), node => {
-  trackInlineObjectsInRootNode(node)
-})
+exports.trackDbNodes = trackDbNodes

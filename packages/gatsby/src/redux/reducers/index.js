@@ -1,6 +1,21 @@
+const backend = process.env.GATSBY_DB_NODES || `redux`
+let nodesReducer
+switch (backend) {
+  case `redux`:
+    nodesReducer = require(`../nodes`).reducer
+    break
+  case `loki`:
+    nodesReducer = require(`../../db/nodes`).reducer
+    break
+  default:
+    throw new Error(
+      `Unsupported DB nodes backend (value of env var GATSBY_DB_NODES)`
+    )
+}
+
 module.exports = {
   program: require(`./program`),
-  nodes: require(`./nodes`),
+  nodes: nodesReducer,
   nodesTouched: require(`./nodes-touched`),
   lastAction: require(`./last-action`),
   plugins: require(`./plugins`),

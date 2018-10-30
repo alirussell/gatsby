@@ -1,10 +1,10 @@
 // @flow
 const sift = require(`sift`)
 const _ = require(`lodash`)
-const prepareRegex = require(`./prepare-regex`)
+const prepareRegex = require(`../utils/prepare-regex`)
 const Promise = require(`bluebird`)
-const { trackInlineObjectsInRootNode } = require(`./node-tracking`)
-const { getNode } = require(`../db/nodes`)
+const { trackInlineObjectsInRootNode } = require(`../db/node-tracking`)
+const { getNode, getNodesByType } = require(`../db/nodes`)
 
 const resolvedNodesCache = new Map()
 const enhancedNodeCache = new Map()
@@ -49,16 +49,12 @@ function awaitSiftField(fields, node, k) {
  * @returns Collection of results. Collection will be limited to size
  * if `firstOnly` is true
  */
-module.exports = ({
-  args,
-  nodes,
-  type,
-  typeName,
-  firstOnly = false,
-}: Object) => {
+module.exports = ({ queryArgs, gqlType, typeName, firstOnly = false }) => {
   // Clone args as for some reason graphql-js removes the constructor
   // from nested objects which breaks a check in sift.js.
-  const clonedArgs = JSON.parse(JSON.stringify(args))
+  const clonedArgs = JSON.parse(JSON.stringify(queryArgs))
+
+  const nodes = getNodesByType(gqlType.name)
 
   const siftifyArgs = object => {
     const newObject = {}
@@ -88,7 +84,7 @@ module.exports = ({
   // this avoids including { eq: x } when resolving fields.
   function extractFieldsToSift(prekey, key, preobj, obj, val) {
     if (_.isPlainObject(val)) {
-      _.forEach((val: any), (v, k) => {
+      _.forEach(val, (v, k) => {
         if (k === `elemMatch`) {
           // elemMatch is operator for arrays and not field we want to prepare
           // so we need to skip it
@@ -183,7 +179,7 @@ module.exports = ({
     return resolveRecursive(
       getNode(siftArgs[0].id[`$eq`]),
       fieldsToSift,
-      type.getFields()
+      gqlType.getFields()
     ).then(node => (node ? [node] : []))
   }
 
@@ -214,7 +210,7 @@ module.exports = ({
           }
 
           const enhancedNodeGenerationPromise = new Promise(resolve => {
-            resolveRecursive(node, fieldsToSift, type.getFields()).then(
+            resolveRecursive(node, fieldsToSift, gqlType.getFields()).then(
               resolvedNode => {
                 trackInlineObjectsInRootNode(resolvedNode)
                 if (cacheKey) {

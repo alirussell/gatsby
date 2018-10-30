@@ -70,5 +70,8 @@ module.exports = async ({ parentSpan } = {}) => {
 
   if (staleNodes.length > 0) {
     staleNodes.forEach(node => deleteNode({ node }))
+    if (process.env.GATSBY_DB_NODES === `loki`) {
+      require(`../db/loki/nodes`).deleteNodeTypeCollections(false)
+    }
   }
 }

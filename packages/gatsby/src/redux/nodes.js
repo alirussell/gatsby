@@ -1,6 +1,8 @@
-const _ = require(`lodash`)
-const Promise = require(`bluebird`)
 const { store } = require(`./index`)
+
+/////////////////////////////////////////////////////////////////////
+// Query
+/////////////////////////////////////////////////////////////////////
 
 /**
  * Get all nodes from redux store.
@@ -47,36 +49,6 @@ exports.hasNodeChanged = (id, digest) => {
 }
 
 /**
- * Get content for a node from the plugin that created it.
- *
- * @param {Object} node
- * @returns {promise}
- */
-exports.loadNodeContent = node => {
-  if (_.isString(node.internal.content)) {
-    return Promise.resolve(node.internal.content)
-  } else {
-    return new Promise(resolve => {
-      // Load plugin's loader function
-      const plugin = store
-        .getState()
-        .flattenedPlugins.find(plug => plug.name === node.internal.owner)
-      const { loadNodeContent } = require(plugin.resolve)
-      if (!loadNodeContent) {
-        throw new Error(
-          `Could not find function loadNodeContent for plugin ${plugin.name}`
-        )
-      }
-
-      return loadNodeContent(node).then(content => {
-        // TODO update node's content field here.
-        resolve(content)
-      })
-    })
-  }
-}
-
-/**
  * Get node and save path dependency.
  *
  * @param {string} id
@@ -88,4 +60,37 @@ exports.getNodeAndSavePathDependency = (id, path) => {
   const node = getNode(id)
   createPageDependency({ path, nodeId: id })
   return node
+}
+
+/////////////////////////////////////////////////////////////////////
+// Reducer
+/////////////////////////////////////////////////////////////////////
+
+exports.reducer = (state = new Map(), action) => {
+  switch (action.type) {
+    case `DELETE_CACHE`:
+      return new Map()
+    case `CREATE_NODE`: {
+      state.set(action.payload.id, action.payload)
+      return state
+    }
+
+    case `ADD_FIELD_TO_NODE`:
+    case `ADD_CHILD_NODE_TO_PARENT_NODE`:
+      state.set(action.payload.id, action.payload)
+      return state
+
+    case `DELETE_NODE`: {
+      state.delete(action.payload.id)
+      return state
+    }
+
+    case `DELETE_NODES`: {
+      action.payload.forEach(id => state.delete(id))
+      return state
+    }
+
+    default:
+      return state
+  }
 }

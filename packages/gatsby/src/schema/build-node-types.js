@@ -19,21 +19,20 @@ const {
 const { nodeInterface } = require(`./node-interface`)
 const {
   getNodes,
-  getNodesByType,
   getNode,
   getNodeAndSavePathDependency,
 } = require(`../db/nodes`)
 const { createPageDependency } = require(`../redux/actions/add-page-dependency`)
 const { setFileNodeRootType } = require(`./types/type-file`)
 const { clearTypeExampleValues } = require(`./data-tree-utils`)
+const { runQuery } = require(`../db/nodes`)
+const { pluginFieldTracking } = require(`./plugin-fields`)
 
 import type { ProcessedNodeType } from "./infer-graphql-type"
 
 type TypeMap = {
   [typeName: string]: ProcessedNodeType,
 }
-
-const nodesCache = new Map()
 
 module.exports = async ({ parentSpan }) => {
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
@@ -165,6 +164,17 @@ module.exports = async ({ parentSpan }) => {
       fields: mergedFieldsFromPlugins,
     })
 
+    const inferredFieldNames = _.keys(
+      inferredInputFieldsFromPlugins.inferredFields
+    )
+
+    // Track which fields are supplied by plugins. This will determine
+    // if we can query by pure data or whether we have to resolve the
+    // fields first. See `./run-query.js`
+    for (let fieldName of inferredFieldNames) {
+      pluginFieldTracking.add(fieldName)
+    }
+
     const gqlType = new GraphQLObjectType({
       name: typeName,
       description: `Node of type ${typeName}`,
@@ -194,31 +204,16 @@ module.exports = async ({ parentSpan }) => {
         args: filterFields,
         async resolve(a, args, context) {
           let path = context.path ? context.path : ``
-          const runSift = require(`./run-sift`)
-          let latestNodes
-          if (
-            process.env.NODE_ENV === `production` &&
-            nodesCache.has(typeName)
-          ) {
-            latestNodes = nodesCache.get(typeName)
-          } else {
-            latestNodes = getNodesByType(typeName)
-            nodesCache.set(typeName, latestNodes)
-          }
-          if (!_.isObject(args)) {
-            args = {}
-          }
 
-          const results = await runSift({
-            args: {
-              filter: {
-                ...args,
-              },
-            },
-            nodes: latestNodes,
+          let queryArgs = _.isObject(args) ? args : {}
+          queryArgs = { filter: queryArgs }
+
+          const results = await runQuery({
+            gqlType,
+            queryArgs,
+            context,
+            typeName,
             firstOnly: true,
-            typeName: typeName,
-            type: gqlType,
           })
 
           if (results.length > 0) {
