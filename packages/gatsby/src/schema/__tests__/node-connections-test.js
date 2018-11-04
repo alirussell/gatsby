@@ -1,7 +1,7 @@
 const { graphql, GraphQLObjectType, GraphQLSchema } = require(`graphql`)
 const _ = require(`lodash`)
 const buildNodeTypes = require(`../build-node-types`)
-const buildNodeConnections = require(`../build-node-connections`)
+const nodeConnections = require(`../node-connections`)
 
 jest.mock(`../../redux/actions/add-page-dependency`, () => {
   return {
@@ -13,7 +13,7 @@ const {
   createPageDependency,
 } = require(`../../redux/actions/add-page-dependency`)
 
-describe(`build-node-connections`, () => {
+describe(`node-connections`, () => {
   let schema, store, types, connections
 
   async function runQuery(query) {
@@ -57,7 +57,7 @@ describe(`build-node-connections`, () => {
     ].forEach(n => store.dispatch({ type: `CREATE_NODE`, payload: n }))
 
     types = await buildNodeTypes({})
-    connections = await buildNodeConnections(_.values(types))
+    connections = await nodeConnections.buildAll(_.values(types))
 
     schema = new GraphQLSchema({
       query: new GraphQLObjectType({
