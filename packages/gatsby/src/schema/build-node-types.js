@@ -202,18 +202,20 @@ module.exports = async ({ parentSpan }) => {
         name: typeName,
         type: gqlType,
         args: filterFields,
-        async resolve(a, args, context) {
-          let path = context.path ? context.path : ``
-
-          let queryArgs = _.isObject(args) ? args : {}
-          queryArgs = { filter: queryArgs }
+        async resolve(a, queryArgs, context) {
+          const path = context.path ? context.path : ``
+          if (!_.isObject(queryArgs)) {
+            queryArgs = {}
+          }
 
           const results = await runQuery({
-            gqlType,
-            queryArgs,
-            context,
-            typeName,
+            queryArgs: {
+              filter: {
+                ...queryArgs,
+              },
+            },
             firstOnly: true,
+            gqlType,
           })
 
           if (results.length > 0) {

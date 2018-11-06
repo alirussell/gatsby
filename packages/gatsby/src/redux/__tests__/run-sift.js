@@ -57,14 +57,12 @@ describe(`run-sift`, () => {
 
       const resultSingular = await runSift({
         gqlType,
-        typeName,
         queryArgs,
         firstOnly: true,
       })
 
       const resultMany = await runSift({
         gqlType,
-        typeName,
         queryArgs,
         firstOnly: false,
       })
@@ -82,14 +80,12 @@ describe(`run-sift`, () => {
 
       const resultSingular = await runSift({
         gqlType,
-        typeName,
         queryArgs,
         firstOnly: true,
       })
 
       const resultMany = await runSift({
         gqlType,
-        typeName,
         queryArgs,
         firstOnly: false,
       })

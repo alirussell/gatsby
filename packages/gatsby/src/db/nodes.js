@@ -84,7 +84,7 @@ function chooseQueryEngine(queryArgs) {
  *
  * {Object} gqlType: built during `./build-node-types.js`
  *
- * {Object} rawGqlArgs: The raw graphql query as a js object. E.g `{
+ * {Object} queryArgs: The raw graphql query as a js object. E.g `{
  * filter: { fields { slug: { eq: "/somepath" } } } }`
  *
  * {Object} context: The context from the QueryJob

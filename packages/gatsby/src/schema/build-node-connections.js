@@ -19,7 +19,7 @@ function handleQueryResult({ results, queryArgs, path }) {
     const connection = connectionFromArray(results, queryArgs)
     connection.totalCount = results.length
 
-    if (results.length > 0 && results[0].internal) {
+    if (results[0].internal) {
       const connectionType = connection.edges[0].node.internal.type
       createPageDependency({
         path,
@@ -83,12 +83,14 @@ module.exports = (types: any) => {
         },
       },
       async resolve(object, queryArgs, b, { rootValue }) {
-        let path = typeof rootValue !== `undefined` ? rootValue.path : undefined
+        let path
+        if (typeof rootValue !== `undefined`) {
+          path = rootValue.path
+        }
         const results = await runQuery({
-          gqlType: type.node.type,
           queryArgs,
-          typeName,
           firstOnly: false,
+          gqlType: type.node.type,
         })
         return handleQueryResult({ results, queryArgs, path })
       },

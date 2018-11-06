@@ -36,6 +36,8 @@ function awaitSiftField(fields, node, k) {
   return undefined
 }
 
+const nodesCache = new Map()
+
 /**
  * Filters a list of nodes using mongodb-like syntax.
  *
@@ -49,12 +51,19 @@ function awaitSiftField(fields, node, k) {
  * @returns Collection of results. Collection will be limited to size
  * if `firstOnly` is true
  */
-module.exports = ({ queryArgs, gqlType, typeName, firstOnly = false }) => {
+module.exports = ({ queryArgs, gqlType, firstOnly = false }: Object) => {
   // Clone args as for some reason graphql-js removes the constructor
   // from nested objects which breaks a check in sift.js.
   const clonedArgs = JSON.parse(JSON.stringify(queryArgs))
 
-  const nodes = getNodesByType(gqlType.name)
+  // this caching can be removed if we move to loki
+  let nodes
+  if (process.env.NODE_ENV === `production` && nodesCache.has(gqlType.name)) {
+    nodes = nodesCache.get(gqlType.name)
+  } else {
+    nodes = getNodesByType(gqlType.name)
+    nodesCache.set(gqlType.name, nodes)
+  }
 
   const siftifyArgs = object => {
     const newObject = {}
@@ -187,7 +196,8 @@ module.exports = ({ queryArgs, gqlType, typeName, firstOnly = false }) => {
     const nodesCacheKey = JSON.stringify({
       // typeName + count being the same is a pretty good
       // indication that the nodes are the same.
-      typeName,
+      typeName: gqlType.name,
+      firstOnly,
       nodesLength: nodes.length,
       ...fieldsToSift,
     })
