@@ -29,8 +29,8 @@ const {
   cloneTreeUntil,
   findLastTextNode,
 } = require(`./hast-processing`)
+const worker = require(`./worker`)
 
-let fileNodes
 let pluginsCacheStr = ``
 let pathPrefixCacheStr = ``
 const astCacheKey = node =>
@@ -39,10 +39,6 @@ const astCacheKey = node =>
   }-${pluginsCacheStr}-${pathPrefixCacheStr}`
 const htmlCacheKey = node =>
   `transformer-remark-markdown-html-${
-    node.internal.contentDigest
-  }-${pluginsCacheStr}-${pathPrefixCacheStr}`
-const htmlAstCacheKey = node =>
-  `transformer-remark-markdown-html-ast-${
     node.internal.contentDigest
   }-${pluginsCacheStr}-${pathPrefixCacheStr}`
 const headingsCacheKey = node =>
@@ -56,18 +52,6 @@ const tableOfContentsCacheKey = (node, appliedTocOptions) =>
     appliedTocOptions
   )}-${pathPrefixCacheStr}`
 
-// ensure only one `/` in new url
-const withPathPrefix = (url, pathPrefix) =>
-  (pathPrefix + url).replace(/\/\//, `/`)
-
-// TODO: remove this check with next major release
-const safeGetCache = ({ getCache, cache }) => id => {
-  if (!getCache) {
-    return cache
-  }
-  return getCache(id)
-}
-
 /**
  * Map that keeps track of generation of AST to not generate it multiple
  * times in parallel.
@@ -75,6 +59,8 @@ const safeGetCache = ({ getCache, cache }) => id => {
  * @type {Map<string,Promise>}
  */
 const ASTPromiseMap = new Map()
+
+let fileNodes
 
 module.exports = (
   {
@@ -95,8 +81,10 @@ module.exports = (
   }
   pluginsCacheStr = pluginOptions.plugins.map(p => p.name).join(``)
   pathPrefixCacheStr = pathPrefix || ``
-
-  const getCache = safeGetCache({ cache, getCache: possibleGetCache })
+  const context = {
+    pluginsCacheStr,
+    pathPrefixCacheStr,
+  }
 
   return new Promise((resolve, reject) => {
     // Setup Remark.
@@ -166,10 +154,18 @@ module.exports = (
     async function getMarkdownAST(markdownNode) {
       // TODO test both paths
       if (workerApi) {
+        if (!fileNodes) {
+          fileNodes = getNodesByType(`File`)
+        }
+        const context = {
+          pluginOptions,
+          fileNodes,
+          parentNode: getNode(markdownNode.parent),
+        }
         return await workerApi.exec(
           require.resolve(`./worker`),
           `getMarkdownAST`,
-          { pluginOptions },
+          context,
           markdownNode
         )
       } else {
@@ -249,17 +245,26 @@ module.exports = (
       }
     }
 
-    async function getHTMLAst(markdownNode) {
-      const cachedAst = await cache.get(htmlAstCacheKey(markdownNode))
-      if (cachedAst) {
-        return cachedAst
+    async function calcHtml(markdownNode) {
+      // TODO test both paths
+      if (workerApi) {
+        if (!fileNodes) {
+          fileNodes = getNodesByType(`File`)
+        }
+        const context = {
+          pluginOptions,
+          fileNodes,
+          parentNode: getNode(markdownNode.parent),
+        }
+        return await workerApi.exec(
+          require.resolve(`./worker`),
+          `getHTML`,
+          context,
+          markdownNode
+        )
       } else {
-        const ast = await getAST(markdownNode)
-        const htmlAst = toHAST(ast, { allowDangerousHTML: true })
-
-        // Save new HTML AST to cache and return
-        cache.set(htmlAstCacheKey(markdownNode), htmlAst)
-        return htmlAst
+        const worker = require(`./worker`)
+        return await worker.getHtml({ pluginOptions }, markdownNode)
       }
     }
 
@@ -268,11 +273,7 @@ module.exports = (
       if (cachedHTML) {
         return cachedHTML
       } else {
-        const ast = await getHTMLAst(markdownNode)
-        // Save new HTML to cache and return
-        const html = hastToHTML(ast, {
-          allowDangerousHTML: true,
-        })
+        const html = await calcHtml(markdownNode)
 
         // Save new HTML to cache and return
         cache.set(htmlCacheKey(markdownNode), html)
@@ -328,7 +329,7 @@ module.exports = (
       htmlAst: {
         type: GraphQLJSON,
         resolve(markdownNode) {
-          return getHTMLAst(markdownNode).then(ast => {
+          return worker.getHTMLAst(context, markdownNode).then(ast => {
             const strippedAst = stripPosition(_.clone(ast), true)
             return hastReparseRaw(strippedAst)
           })
@@ -353,7 +354,7 @@ module.exports = (
         async resolve(markdownNode, { format, pruneLength, truncate }) {
           if (format === `html`) {
             if (pluginOptions.excerpt_separator) {
-              const fullAST = await getHTMLAst(markdownNode)
+              const fullAST = await worker.getHTMLAst(context, markdownNode)
               const excerptAST = cloneTreeUntil(
                 fullAST,
                 ({ nextNode }) =>
@@ -364,7 +365,7 @@ module.exports = (
                 allowDangerousHTML: true,
               })
             }
-            const fullAST = await getHTMLAst(markdownNode)
+            const fullAST = await worker.getHTMLAst(context, markdownNode)
             if (!fullAST.children.length) {
               return ``
             }

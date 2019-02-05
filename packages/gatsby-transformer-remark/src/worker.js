@@ -2,6 +2,29 @@ const _ = require(`lodash`)
 const Remark = require(`remark`)
 const Promise = require(`bluebird`)
 const visit = require(`unist-util-visit`)
+const hastToHTML = require(`hast-util-to-html`)
+const toHAST = require(`mdast-util-to-hast`)
+
+const htmlAstCacheKey = (context, node) => {
+  const { pluginsCacheStr, pathPrefixCacheStr } = context
+  return `transformer-remark-markdown-html-ast-${
+    node.internal.contentDigest
+  }-${pluginsCacheStr}-${pathPrefixCacheStr}`
+}
+const astCacheKey = (context, node) => {
+  const { pluginsCacheStr, pathPrefixCacheStr } = context
+  return `transformer-remark-markdown-ast-${
+    node.internal.contentDigest
+  }-${pluginsCacheStr}-${pathPrefixCacheStr}`
+}
+
+/**
+ * Map that keeps track of generation of AST to not generate it multiple
+ * times in parallel.
+ *
+ * @type {Map<string,Promise>}
+ */
+const ASTPromiseMap = new Map()
 
 // ensure only one `/` in new url
 const withPathPrefix = (url, pathPrefix) =>
@@ -17,11 +40,6 @@ async function getMarkdownAST(context, markdownNode) {
     pathPrefix,
     ...restApi
   } = context
-
-  // TODO call this outside
-  // if (process.env.NODE_ENV !== `production` || !fileNodes) {
-  //   fileNodes = getNodesByType(`File`)
-  // }
 
   // Use Bluebird's Promise function "each" to run remark plugins serially.
   await Promise.each(pluginOptions.plugins, plugin => {
@@ -132,6 +150,56 @@ async function getMarkdownAST(context, markdownNode) {
   return markdownAST
 }
 
+async function getAST(context, markdownNode) {
+  const { cache } = context
+  const cacheKey = astCacheKey(context, markdownNode)
+  const cachedAST = await cache.get(cacheKey)
+  if (cachedAST) {
+    return cachedAST
+  } else if (ASTPromiseMap.has(cacheKey)) {
+    // We are already generating AST, so let's wait for it
+    return await ASTPromiseMap.get(cacheKey)
+  } else {
+    const ASTGenerationPromise = getMarkdownAST(context, markdownNode)
+    ASTGenerationPromise.then(markdownAST => {
+      cache.set(cacheKey, markdownAST)
+      ASTPromiseMap.delete(cacheKey)
+    }).catch(err => {
+      ASTPromiseMap.delete(cacheKey)
+      return err
+    })
+    // Save new AST to cache and return
+    // We can now release promise, as we cached result
+    ASTPromiseMap.set(cacheKey, ASTGenerationPromise)
+    return ASTGenerationPromise
+  }
+}
+
+async function getHTMLAst(context, markdownNode) {
+  const { cache } = context
+  const cachedAst = await cache.get(htmlAstCacheKey(context, markdownNode))
+  if (cachedAst) {
+    return cachedAst
+  } else {
+    const ast = await getAST(context, markdownNode)
+    const htmlAst = toHAST(ast, { allowDangerousHTML: true })
+
+    // Save new HTML AST to cache and return
+    cache.set(htmlAstCacheKey(context, markdownNode), htmlAst)
+    return htmlAst
+  }
+}
+
+async function getHTML(context, markdownNode) {
+  const ast = await getHTMLAst(context, markdownNode)
+  // Save new HTML to cache and return
+  const html = hastToHTML(ast, {
+    allowDangerousHTML: true,
+  })
+  return html
+}
+
 module.exports = {
   getMarkdownAST,
+  getHTML,
 }

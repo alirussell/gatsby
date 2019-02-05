@@ -20,7 +20,7 @@ const slash = require(`slash`)
 // 4. Create the responsive images.
 // 5. Set the html w/ aspect ratio helper.
 module.exports = (
-  { files, markdownNode, markdownAST, pathPrefix, getNode, reporter, cache },
+  { files, markdownNode, markdownAST, pathPrefix, parentNode, reporter, cache },
   pluginOptions
 ) => {
   const defaults = {
@@ -77,7 +77,6 @@ module.exports = (
   ) {
     // Check if this markdownNode has a File parent. This plugin
     // won't work if the image isn't hosted locally.
-    const parentNode = getNode(markdownNode.parent)
     let imagePath
     if (parentNode && parentNode.dir) {
       imagePath = slash(path.join(parentNode.dir, node.url))
