@@ -84,6 +84,7 @@ module.exports = (
   const context = {
     pluginsCacheStr,
     pathPrefixCacheStr,
+    pluginOptions,
   }
 
   return new Promise((resolve, reject) => {
@@ -154,10 +155,10 @@ module.exports = (
     async function getMarkdownAST(markdownNode) {
       // TODO test both paths
       if (workerApi) {
-        if (!fileNodes) {
-          fileNodes = getNodesByType(`File`)
-        }
-        const context = {
+        // if (!fileNodes) {
+        //   fileNodes = getNodesByType(`File`)
+        // }
+        const myContext = {
           pluginOptions,
           fileNodes,
           parentNode: getNode(markdownNode.parent),
@@ -165,12 +166,18 @@ module.exports = (
         return await workerApi.exec(
           require.resolve(`./worker`),
           `getMarkdownAST`,
-          context,
+          myContext,
           markdownNode
         )
       } else {
         const worker = require(`./worker`)
-        return await worker.getMarkdownAST({ cache, ...context }, markdownNode)
+        const myContext = {
+          cache,
+          getCache: possibleGetCache,
+          parentNode: getNode(markdownNode.parent),
+          ...context,
+        }
+        return await worker.getMarkdownAST(myContext, markdownNode)
       }
     }
 
@@ -248,9 +255,9 @@ module.exports = (
     async function calcHtml(markdownNode) {
       // TODO test both paths
       if (workerApi) {
-        if (!fileNodes) {
-          fileNodes = getNodesByType(`File`)
-        }
+        // if (!fileNodes) {
+        //   fileNodes = getNodesByType(`File`)
+        // }
         const context = {
           pluginOptions,
           fileNodes,
@@ -264,7 +271,13 @@ module.exports = (
         )
       } else {
         const worker = require(`./worker`)
-        return await worker.getHtml({ cache, ...context }, markdownNode)
+        const myContext = {
+          cache,
+          getCache: possibleGetCache,
+          parentNode: getNode(markdownNode.parent),
+          ...context,
+        }
+        return await worker.getHtml(myContext, markdownNode)
       }
     }
 
@@ -329,12 +342,16 @@ module.exports = (
       htmlAst: {
         type: GraphQLJSON,
         resolve(markdownNode) {
-          return worker
-            .getHTMLAst({ cache, ...context }, markdownNode)
-            .then(ast => {
-              const strippedAst = stripPosition(_.clone(ast), true)
-              return hastReparseRaw(strippedAst)
-            })
+          const myContext = {
+            cache,
+            getCache: possibleGetCache,
+            parentNode: getNode(markdownNode.parent),
+            ...context,
+          }
+          return worker.getHTMLAst(myContext, markdownNode).then(ast => {
+            const strippedAst = stripPosition(_.clone(ast), true)
+            return hastReparseRaw(strippedAst)
+          })
         },
       },
       excerpt: {
@@ -356,10 +373,13 @@ module.exports = (
         async resolve(markdownNode, { format, pruneLength, truncate }) {
           if (format === `html`) {
             if (pluginOptions.excerpt_separator) {
-              const fullAST = await worker.getHTMLAst(
-                { cache, ...context },
-                markdownNode
-              )
+              const myContext = {
+                cache,
+                getCache: possibleGetCache,
+                parentNode: getNode(markdownNode.parent),
+                ...context,
+              }
+              const fullAST = await worker.getHTMLAst(myContext, markdownNode)
               const excerptAST = cloneTreeUntil(
                 fullAST,
                 ({ nextNode }) =>
@@ -370,10 +390,13 @@ module.exports = (
                 allowDangerousHTML: true,
               })
             }
-            const fullAST = await worker.getHTMLAst(
-              { cache, ...context },
-              markdownNode
-            )
+            const myContext = {
+              cache,
+              getCache: possibleGetCache,
+              parentNode: getNode(markdownNode.parent),
+              ...context,
+            }
+            const fullAST = await worker.getHTMLAst(myContext, markdownNode)
             if (!fullAST.children.length) {
               return ``
             }

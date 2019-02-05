@@ -125,8 +125,10 @@ const findIdsWithoutDataDependencies = () => {
 }
 
 const runQueriesForPathnames = pathnames => {
-  const staticQueries = pathnames.filter(p => p.slice(0, 4) === `sq--`)
-  const pageQueries = pathnames.filter(p => p.slice(0, 4) !== `sq--`)
+  const staticQueries = _.shuffle(
+    pathnames.filter(p => p.slice(0, 4) === `sq--`)
+  )
+  const pageQueries = _.shuffle(pathnames.filter(p => p.slice(0, 4) !== `sq--`))
   const state = store.getState()
 
   staticQueries.forEach(id => {

@@ -180,7 +180,10 @@ async function setup(args) {
  */
 async function exec(file, name, context, ...args) {
   const module = require(file)
-  return await module[name](Object.assign(context, globalContext), ...args)
+  return await module[name](
+    Object.assign(context || {}, globalContext),
+    ...args
+  )
 }
 
 process.on(`ipc`, handleIpc)

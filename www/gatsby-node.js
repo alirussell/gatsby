@@ -237,13 +237,6 @@ exports.createPages = ({ graphql, actions, reporter }) => {
               id
               title
               slug
-              readme {
-                id
-                childMarkdownRemark {
-                  id
-                  html
-                }
-              }
             }
           }
         }
