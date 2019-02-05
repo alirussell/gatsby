@@ -7,19 +7,9 @@ const {
   GraphQLInt,
   GraphQLFloat,
 } = require(`gatsby/graphql`)
-const {
-  queueImageResizing,
-  base64,
-  fluid,
-  fixed,
-  traceSVG,
-} = require(`gatsby-plugin-sharp`)
+const { queueImageResizing, base64 } = require(`gatsby-plugin-sharp`)
 
 const sharp = require(`sharp`)
-const fs = require(`fs`)
-const fsExtra = require(`fs-extra`)
-const imageSize = require(`probe-image-size`)
-const path = require(`path`)
 
 const DEFAULT_PNG_COMPRESSION_SPEED = 4
 
@@ -30,31 +20,24 @@ const {
   PotraceType,
 } = require(`./types`)
 
-function toArray(buf) {
-  var arr = new Array(buf.length)
-
-  for (var i = 0; i < buf.length; i++) {
-    arr[i] = buf[i]
-  }
-
-  return arr
-}
-
-const getTracedSVG = async ({ file, image, fieldArgs }) =>
-  traceSVG({
-    file,
-    args: { ...fieldArgs.traceSVG },
-    fileArgs: fieldArgs,
-  })
-
 const fixedNodeType = ({
   type,
   pathPrefix,
   getNodeAndSavePathDependency,
   reporter,
+  workerApi,
   name,
   cache,
 }) => {
+  const fixed = ({ file, args }) =>
+    workerApi.exec(require.resolve(`./worker`), `fixed`, null, {
+      file,
+      args,
+    })
+
+  const getTracedSVG = parent =>
+    workerApi.exec(require.resolve(`./worker`), `getTracedSVG`, null, parent)
+
   return {
     type: new GraphQLObjectType({
       name: name,
@@ -62,7 +45,7 @@ const fixedNodeType = ({
         base64: { type: GraphQLString },
         tracedSVG: {
           type: GraphQLString,
-          resolve: parent => getTracedSVG(parent),
+          resolve: getTracedSVG,
         },
         aspectRatio: { type: GraphQLFloat },
         width: { type: GraphQLFloat },
@@ -71,38 +54,26 @@ const fixedNodeType = ({
         srcSet: { type: GraphQLString },
         srcWebp: {
           type: GraphQLString,
-          resolve: ({ file, image, fieldArgs }) => {
+          resolve: async ({ file, image, fieldArgs }) => {
             // If the file is already in webp format or should explicitly
             // be converted to webp, we do not create additional webp files
             if (file.extension === `webp` || fieldArgs.toFormat === `webp`) {
               return null
             }
             const args = { ...fieldArgs, pathPrefix, toFormat: `webp` }
-            return Promise.resolve(
-              fixed({
-                file,
-                args,
-                reporter,
-                cache,
-              })
-            ).then(({ src }) => src)
+            return await fixed({ file, args }).src
           },
         },
         srcSetWebp: {
           type: GraphQLString,
-          resolve: ({ file, image, fieldArgs }) => {
+          resolve: async ({ file, image, fieldArgs }) => {
+            // If the file is already in webp format or should explicitly
+            // be converted to webp, we do not create additional webp files
             if (file.extension === `webp` || fieldArgs.toFormat === `webp`) {
               return null
             }
             const args = { ...fieldArgs, pathPrefix, toFormat: `webp` }
-            return Promise.resolve(
-              fixed({
-                file,
-                args,
-                reporter,
-                cache,
-              })
-            ).then(({ srcSet }) => srcSet)
+            return await fixed({ file, args }).srcSet
           },
         },
         originalName: { type: GraphQLString },
@@ -152,23 +123,16 @@ const fixedNodeType = ({
         defaultValue: 0,
       },
     },
-    resolve: (image, fieldArgs, context) => {
+    resolve: async (image, fieldArgs, context) => {
       const file = getNodeAndSavePathDependency(image.parent, context.path)
       const args = { ...fieldArgs, pathPrefix }
-      return Promise.resolve(
-        fixed({
-          file,
-          args,
-          reporter,
-          cache,
-        })
-      ).then(o =>
-        Object.assign({}, o, {
-          fieldArgs: args,
-          image,
-          file,
-        })
-      )
+      const result = await fixed({ file, args })
+      return {
+        fieldArgs: args,
+        image,
+        file,
+        ...result,
+      }
     },
   }
 }
@@ -179,8 +143,15 @@ const fluidNodeType = ({
   getNodeAndSavePathDependency,
   reporter,
   name,
+  workerApi,
   cache,
 }) => {
+  const getTracedSVG = parent =>
+    workerApi.exec(require.resolve(`./worker`), `getTracedSVG`, null, parent)
+
+  const fluid = (file, args) =>
+    workerApi.exec(require.resolve(`./worker`), `fluid`, null, { file, args })
+
   return {
     type: new GraphQLObjectType({
       name: name,
@@ -188,43 +159,29 @@ const fluidNodeType = ({
         base64: { type: GraphQLString },
         tracedSVG: {
           type: GraphQLString,
-          resolve: parent => getTracedSVG(parent),
+          resolve: getTracedSVG,
         },
         aspectRatio: { type: GraphQLFloat },
         src: { type: GraphQLString },
         srcSet: { type: GraphQLString },
         srcWebp: {
           type: GraphQLString,
-          resolve: ({ file, image, fieldArgs }) => {
+          resolve: async ({ file, image, fieldArgs }) => {
             if (image.extension === `webp` || fieldArgs.toFormat === `webp`) {
               return null
             }
             const args = { ...fieldArgs, pathPrefix, toFormat: `webp` }
-            return Promise.resolve(
-              fluid({
-                file,
-                args,
-                reporter,
-                cache,
-              })
-            ).then(({ src }) => src)
+            return await fluid(file, args).src
           },
         },
         srcSetWebp: {
           type: GraphQLString,
-          resolve: ({ file, image, fieldArgs }) => {
+          resolve: async ({ file, image, fieldArgs }) => {
             if (image.extension === `webp` || fieldArgs.toFormat === `webp`) {
               return null
             }
             const args = { ...fieldArgs, pathPrefix, toFormat: `webp` }
-            return Promise.resolve(
-              fluid({
-                file,
-                args,
-                reporter,
-                cache,
-              })
-            ).then(({ srcSet }) => srcSet)
+            return await fluid(file, args).srcSet
           },
         },
         sizes: { type: GraphQLString },
@@ -287,23 +244,16 @@ const fluidNodeType = ({
         description: `A list of image widths to be generated. Example: [ 200, 340, 520, 890 ]`,
       },
     },
-    resolve: (image, fieldArgs, context) => {
+    resolve: async (image, fieldArgs, context) => {
       const file = getNodeAndSavePathDependency(image.parent, context.path)
       const args = { ...fieldArgs, pathPrefix }
-      return Promise.resolve(
-        fluid({
-          file,
-          args,
-          reporter,
-          cache,
-        })
-      ).then(o =>
-        Object.assign({}, o, {
-          fieldArgs: args,
-          image,
-          file,
-        })
-      )
+      const result = await fluid(file, args)
+      return {
+        ...result,
+        fieldArgs: args,
+        image,
+        file,
+      }
     },
   }
 }
@@ -313,17 +263,22 @@ module.exports = ({
   pathPrefix,
   getNodeAndSavePathDependency,
   reporter,
+  workerApi,
   cache,
 }) => {
   if (type.name !== `ImageSharp`) {
     return {}
   }
 
+  const getTracedSVG = parent =>
+    workerApi.exec(require.resolve(`./worker`), `getTracedSVG`, null, parent)
+
   const nodeOptions = {
     type,
     pathPrefix,
     getNodeAndSavePathDependency,
     reporter,
+    workerApi,
     cache,
   }
 
@@ -356,37 +311,13 @@ module.exports = ({
       args: {},
       async resolve(image, fieldArgs, context) {
         const details = getNodeAndSavePathDependency(image.parent, context.path)
-        const dimensions = imageSize.sync(
-          toArray(fs.readFileSync(details.absolutePath))
+        return await workerApi.exec(
+          require.resolve(`./worker`),
+          `original`,
+          null,
+          image,
+          details
         )
-        const imageName = `${details.name}-${image.internal.contentDigest}${
-          details.ext
-        }`
-        const publicPath = path.join(
-          process.cwd(),
-          `public`,
-          `static`,
-          imageName
-        )
-
-        if (!fsExtra.existsSync(publicPath)) {
-          fsExtra.copy(details.absolutePath, publicPath, err => {
-            if (err) {
-              console.error(
-                `error copying file from ${
-                  details.absolutePath
-                } to ${publicPath}`,
-                err
-              )
-            }
-          })
-        }
-
-        return {
-          width: dimensions.width,
-          height: dimensions.height,
-          src: `${pathPrefix}/static/${imageName}`,
-        }
       },
     },
     resize: {
@@ -396,7 +327,7 @@ module.exports = ({
           src: { type: GraphQLString },
           tracedSVG: {
             type: GraphQLString,
-            resolve: parent => getTracedSVG(parent),
+            resolve: getTracedSVG,
           },
           width: { type: GraphQLInt },
           height: { type: GraphQLInt },

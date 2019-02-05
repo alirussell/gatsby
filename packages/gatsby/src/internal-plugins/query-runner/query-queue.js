@@ -8,7 +8,7 @@ const processing = new Set()
 const waiting = new Map()
 
 const queueOptions = {
-  concurrent: 4,
+  concurrent: 32,
   // Merge duplicate jobs.
   merge: (oldTask, newTask, cb) => {
     cb(null, newTask)
