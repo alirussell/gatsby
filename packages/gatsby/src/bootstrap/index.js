@@ -22,6 +22,7 @@ const tracer = require(`opentracing`).globalTracer()
 const preferDefault = require(`./prefer-default`)
 const nodeTracking = require(`../db/node-tracking`)
 require(`../db`).startAutosave()
+const workerApi = require(`../utils/worker-api/parent`)
 
 // Show stack trace on unhandled promises.
 process.on(`unhandledRejection`, (reason, p) => {
@@ -387,6 +388,8 @@ module.exports = async (args: BootstrapArgs) => {
     const schema = store.getState().schema
     return graphql(schema, query, context, context, context)
   }
+
+  workerApi.initPool()
 
   // Collect pages.
   activity = report.activityTimer(`createPages`, {

@@ -8,6 +8,7 @@ const getCache = require(`./get-cache`)
 const apiList = require(`./api-node-docs`)
 const createNodeId = require(`./create-node-id`)
 const createContentDigest = require(`./create-content-digest`)
+const workerApi = require(`./worker-api/parent`)
 
 // Bind action creators per plugin so we can auto-add
 // metadata to actions they create.
@@ -109,6 +110,7 @@ const runAPI = (plugin, api, args) => {
         getNodesByType,
         hasNodeChanged,
         reporter,
+        workerApi,
         getNodeAndSavePathDependency,
         cache,
         createNodeId: namespacedCreateNodeId,
