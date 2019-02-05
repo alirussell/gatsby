@@ -170,7 +170,7 @@ module.exports = (
         )
       } else {
         const worker = require(`./worker`)
-        return await worker.getMarkdownAST(null, markdownNode)
+        return await worker.getMarkdownAST({ cache, ...context }, markdownNode)
       }
     }
 
@@ -264,7 +264,7 @@ module.exports = (
         )
       } else {
         const worker = require(`./worker`)
-        return await worker.getHtml({ pluginOptions }, markdownNode)
+        return await worker.getHtml({ cache, ...context }, markdownNode)
       }
     }
 
@@ -329,10 +329,12 @@ module.exports = (
       htmlAst: {
         type: GraphQLJSON,
         resolve(markdownNode) {
-          return worker.getHTMLAst(context, markdownNode).then(ast => {
-            const strippedAst = stripPosition(_.clone(ast), true)
-            return hastReparseRaw(strippedAst)
-          })
+          return worker
+            .getHTMLAst({ cache, ...context }, markdownNode)
+            .then(ast => {
+              const strippedAst = stripPosition(_.clone(ast), true)
+              return hastReparseRaw(strippedAst)
+            })
         },
       },
       excerpt: {
@@ -354,7 +356,10 @@ module.exports = (
         async resolve(markdownNode, { format, pruneLength, truncate }) {
           if (format === `html`) {
             if (pluginOptions.excerpt_separator) {
-              const fullAST = await worker.getHTMLAst(context, markdownNode)
+              const fullAST = await worker.getHTMLAst(
+                { cache, ...context },
+                markdownNode
+              )
               const excerptAST = cloneTreeUntil(
                 fullAST,
                 ({ nextNode }) =>
@@ -365,7 +370,10 @@ module.exports = (
                 allowDangerousHTML: true,
               })
             }
-            const fullAST = await worker.getHTMLAst(context, markdownNode)
+            const fullAST = await worker.getHTMLAst(
+              { cache, ...context },
+              markdownNode
+            )
             if (!fullAST.children.length) {
               return ``
             }

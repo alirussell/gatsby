@@ -201,5 +201,6 @@ async function getHTML(context, markdownNode) {
 
 module.exports = {
   getMarkdownAST,
+  getHTMLAst,
   getHTML,
 }
