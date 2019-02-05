@@ -121,7 +121,7 @@ function makeUnsupportedProps(o, props) {
 function makeApi({ type, pathPrefix, plugin }) {
   // TODO Figure out how to get real cache
   //  const cache = new Cache({ name: plugin.name }).init()
-  const cache = new Cache({ name: `someName` }).init()
+  const cache = new Cache({ name: `gatsby-transformer-remark` }).init()
   const api = {
     cache,
     // Caching story needs more thinking
