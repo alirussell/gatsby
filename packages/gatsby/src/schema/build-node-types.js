@@ -189,14 +189,6 @@ async function buildProcessedType({ nodes, typeName, processedTypes, span }) {
   })
 
   const mergedFieldsFromPlugins = _.merge(...pluginFields)
-
-  _.each(mergedFieldsFromPlugins, (fieldConfig, fieldName) => {
-    if (fieldConfig.workerPlugin) {
-      const workerField = { fieldConfig, fieldName, typeName }
-      fieldConfig.resolve = workerResolvers.defineResolver(workerField)
-    }
-  })
-
   const pluginInputFields = inferInputObjectStructureFromFields({
     fields: mergedFieldsFromPlugins,
   })

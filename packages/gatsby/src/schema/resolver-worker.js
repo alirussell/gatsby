@@ -1,4 +1,3 @@
-const _ = require(`lodash`)
 const path = require(`path`)
 const invariant = require(`invariant`)
 const uuidv4 = require(`uuid/v4`)
@@ -9,9 +8,7 @@ const reporter = require(`gatsby-cli/lib/reporter`)
 // From jest-worker library `src/types.js`
 const JEST_WORKER_CHILD_MESSAGE_IPC = 3
 
-// Contains all the types that this worker is configured to handle
-// requests for field resolvers for.
-const types = {}
+let setupArgs
 
 // List of all in-flight RPCs. keys are RPC ids, and values are
 // objects containing the `time` the RPC was sent, and the `resolve`
@@ -93,6 +90,18 @@ function makeReporter() {
   })
 }
 
+/**
+ * Called by jest-worker when the worker is created. Setup involves
+ * requiring each field's resolver module and storing it in the
+ * `fields` global so that they can be found when `execResolver` is
+ * called
+ */
+async function setup(args) {
+  setupArgs = args
+}
+
+const fieldSets = new Map()
+
 function makeRpcs(o, rpcNames) {
   for (const rpcName of rpcNames) {
     o[rpcName] = makeRpc(rpcName)
@@ -124,8 +133,13 @@ function makeUnsupportedProps(o, props) {
  * result in RPC calls back to the main process. This goes for static
  * values such as `type`.
  */
-function makeApi({ type, pathPrefix, plugin }) {
+function makeApi({ type, setupArgs, plugin }) {
+  const { pathPrefix } = setupArgs
   const cache = new Cache({ name: plugin.name }).init()
+  const workerResolver = {
+    wrap: (pluginName, resolver) => resolver,
+    makeWrapper: pluginName => resolver => resolver,
+  }
   const api = {
     cache,
     // Caching story needs more thinking
@@ -137,6 +151,7 @@ function makeApi({ type, pathPrefix, plugin }) {
     reporter: makeReporter(),
     type,
     pathPrefix,
+    workerResolver,
   }
   makeUnsupportedProps(api, [
     `boundActionCreators`,
@@ -157,38 +172,14 @@ function makeApi({ type, pathPrefix, plugin }) {
   return api
 }
 
-function storeResolver(typeName, fieldName, fieldConfig) {
-  _.set(types, [typeName, `fields`, fieldName], fieldConfig)
-}
-
-async function initModule(pathPrefix, { fieldName, plugin, type }) {
+async function initFieldSet(setupArgs, { fieldName, plugin, type }) {
   invariant(plugin, `plugin`)
   invariant(plugin.resolve, `plugin.resolve`)
   invariant(plugin.name, `plugin.name`)
   const resolverFile = path.join(plugin.resolve, `gatsby-node.js`)
   const module = require(resolverFile)
-  const api = makeApi({ type, pathPrefix, plugin })
-  const newFields = await module.setFieldsOnGraphQLNodeType(
-    api,
-    plugin.pluginOptions
-  )
-  _.forEach(newFields, (fieldConfig, fieldName) => {
-    storeResolver(type.name, fieldName, fieldConfig)
-  })
-}
-
-/**
- * Called by jest-worker when the worker is created. Setup involves
- * requiring each field's resolver module and storing it in the
- * `fields` global so that they can be found when `execResolver` is
- * called
- */
-async function setup(args) {
-  const { pathPrefix, fields } = args
-  invariant(fields, `setup fields`)
-  for (const field of fields) {
-    await initModule(pathPrefix, field)
-  }
+  const api = makeApi({ type, setupArgs, plugin })
+  return await module.setFieldsOnGraphQLNodeType(api, plugin.pluginOptions)
 }
 
 /**
@@ -197,15 +188,15 @@ async function setup(args) {
  * calls it with node and args. The response will be sent back to the
  * main process by jest-worker
  */
-async function execResolver(typeName, fieldName, node, args) {
-  invariant(typeName, `execResolver typeName`)
-  invariant(fieldName, `execResolver fieldName`)
-  const type = types[typeName]
-  invariant(type, `execResolver type`)
-  const field = type.fields[fieldName]
-  invariant(field, `execResolver field`)
+async function execResolver(request) {
+  const { fieldName, plugin, node, args } = request
+  let fieldSet = fieldSets.get(plugin.name)
+  if (!fieldSet) {
+    fieldSet = await initFieldSet(setupArgs, request)
+    fieldSets.set(plugin.name, fieldSet)
+  }
+  const field = fieldSet[fieldName]
   const resolver = field.resolve
-  invariant(resolver, `execResolver resolver`)
   return await resolver(node, args)
 }
 

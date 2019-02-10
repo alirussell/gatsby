@@ -60,10 +60,6 @@ const tableOfContentsCacheKey = (node, appliedTocOptions) =>
 const withPathPrefix = (url, pathPrefix) =>
   (pathPrefix + url).replace(/\/\//, `/`)
 
-// A GraphQL Field config can include this to inform Gatsby that the
-// field's resolver is safe to run in another thread
-const workerPlugin = `gatsby-transformer-remark`
-
 // TODO: remove this check with next major release
 const safeGetCache = ({ getCache, cache }) => id => {
   if (!getCache) {
@@ -89,6 +85,7 @@ module.exports = (
     cache,
     getCache: possibleGetCache,
     reporter,
+    workerResolver,
     ...rest
   },
   pluginOptions
@@ -100,6 +97,8 @@ module.exports = (
   pathPrefixCacheStr = pathPrefix || ``
 
   const getCache = safeGetCache({ cache, getCache: possibleGetCache })
+
+  const resolveWrapper = workerResolver.makeWrapper(`gatsby-transformer-remark`)
 
   return new Promise((resolve, reject) => {
     // Setup Remark.
@@ -405,23 +404,95 @@ module.exports = (
       },
     })
 
+    const getExcerpt = async (
+      markdownNode,
+      { format, pruneLength, truncate }
+    ) => {
+      if (format === `html`) {
+        if (pluginOptions.excerpt_separator) {
+          const fullAST = await getHTMLAst(markdownNode)
+          const excerptAST = cloneTreeUntil(
+            fullAST,
+            ({ nextNode }) =>
+              nextNode.type === `raw` &&
+              nextNode.value === pluginOptions.excerpt_separator
+          )
+          return hastToHTML(excerptAST, {
+            allowDangerousHTML: true,
+          })
+        }
+        const fullAST = await getHTMLAst(markdownNode)
+        if (!fullAST.children.length) {
+          return ``
+        }
+
+        const excerptAST = cloneTreeUntil(fullAST, ({ root }) => {
+          const totalExcerptSoFar = getConcatenatedValue(root)
+          return totalExcerptSoFar && totalExcerptSoFar.length > pruneLength
+        })
+        const unprunedExcerpt = getConcatenatedValue(excerptAST)
+        if (!unprunedExcerpt) {
+          return ``
+        }
+
+        if (pruneLength && unprunedExcerpt.length < pruneLength) {
+          return hastToHTML(excerptAST, {
+            allowDangerousHTML: true,
+          })
+        }
+
+        const lastTextNode = findLastTextNode(excerptAST)
+        const amountToPruneLastNode =
+          pruneLength - (unprunedExcerpt.length - lastTextNode.value.length)
+        if (!truncate) {
+          lastTextNode.value = prune(
+            lastTextNode.value,
+            amountToPruneLastNode,
+            `…`
+          )
+        } else {
+          lastTextNode.value = _.truncate(lastTextNode.value, {
+            length: pruneLength,
+            omission: `…`,
+          })
+        }
+        return hastToHTML(excerptAST, {
+          allowDangerousHTML: true,
+        })
+      }
+      if (markdownNode.excerpt) {
+        return Promise.resolve(markdownNode.excerpt)
+      }
+      return getAST(markdownNode).then(ast => {
+        const excerptNodes = []
+        visit(ast, node => {
+          if (node.type === `text` || node.type === `inlineCode`) {
+            excerptNodes.push(node.value)
+          }
+          return
+        })
+        if (!truncate) {
+          return prune(excerptNodes.join(` `), pruneLength, `…`)
+        }
+        return _.truncate(excerptNodes.join(` `), {
+          length: pruneLength,
+          omission: `…`,
+        })
+      })
+    }
+
     return resolve({
       html: {
         type: GraphQLString,
-        workerPlugin,
-        resolve(markdownNode) {
-          return getHTML(markdownNode)
-        },
+        resolve: resolveWrapper(getHTML),
       },
       htmlAst: {
         type: GraphQLJSON,
-        workerPlugin,
-        resolve(markdownNode) {
-          return getHTMLAst(markdownNode).then(ast => {
-            const strippedAst = stripPosition(_.clone(ast), true)
-            return hastReparseRaw(strippedAst)
-          })
-        },
+        resolve: resolveWrapper(markdownNode =>
+          getHTMLAst(markdownNode).then(ast =>
+            hastReparseRaw(stripPosition(_.clone(ast), true))
+          )
+        ),
       },
       excerpt: {
         type: GraphQLString,
@@ -439,80 +510,7 @@ module.exports = (
             defaultValue: `plain`,
           },
         },
-        workerPlugin,
-        async resolve(markdownNode, { format, pruneLength, truncate }) {
-          if (format === `html`) {
-            if (pluginOptions.excerpt_separator) {
-              const fullAST = await getHTMLAst(markdownNode)
-              const excerptAST = cloneTreeUntil(
-                fullAST,
-                ({ nextNode }) =>
-                  nextNode.type === `raw` &&
-                  nextNode.value === pluginOptions.excerpt_separator
-              )
-              return hastToHTML(excerptAST, {
-                allowDangerousHTML: true,
-              })
-            }
-            const fullAST = await getHTMLAst(markdownNode)
-            if (!fullAST.children.length) {
-              return ``
-            }
-
-            const excerptAST = cloneTreeUntil(fullAST, ({ root }) => {
-              const totalExcerptSoFar = getConcatenatedValue(root)
-              return totalExcerptSoFar && totalExcerptSoFar.length > pruneLength
-            })
-            const unprunedExcerpt = getConcatenatedValue(excerptAST)
-            if (!unprunedExcerpt) {
-              return ``
-            }
-
-            if (pruneLength && unprunedExcerpt.length < pruneLength) {
-              return hastToHTML(excerptAST, {
-                allowDangerousHTML: true,
-              })
-            }
-
-            const lastTextNode = findLastTextNode(excerptAST)
-            const amountToPruneLastNode =
-              pruneLength - (unprunedExcerpt.length - lastTextNode.value.length)
-            if (!truncate) {
-              lastTextNode.value = prune(
-                lastTextNode.value,
-                amountToPruneLastNode,
-                `…`
-              )
-            } else {
-              lastTextNode.value = _.truncate(lastTextNode.value, {
-                length: pruneLength,
-                omission: `…`,
-              })
-            }
-            return hastToHTML(excerptAST, {
-              allowDangerousHTML: true,
-            })
-          }
-          if (markdownNode.excerpt) {
-            return Promise.resolve(markdownNode.excerpt)
-          }
-          return getAST(markdownNode).then(ast => {
-            const excerptNodes = []
-            visit(ast, node => {
-              if (node.type === `text` || node.type === `inlineCode`) {
-                excerptNodes.push(node.value)
-              }
-              return
-            })
-            if (!truncate) {
-              return prune(excerptNodes.join(` `), pruneLength, `…`)
-            }
-            return _.truncate(excerptNodes.join(` `), {
-              length: pruneLength,
-              omission: `…`,
-            })
-          })
-        },
+        resolve: resolveWrapper(getExcerpt),
       },
       headings: {
         type: new GraphQLList(HeadingType),
@@ -521,21 +519,19 @@ module.exports = (
             type: HeadingLevels,
           },
         },
-        workerPlugin,
-        resolve(markdownNode, { depth }) {
-          return getHeadings(markdownNode).then(headings => {
+        resolve: resolveWrapper((markdownNode, { depth }) =>
+          getHeadings(markdownNode).then(headings => {
             if (typeof depth === `number`) {
               headings = headings.filter(heading => heading.depth === depth)
             }
             return headings
           })
-        },
+        ),
       },
       timeToRead: {
         type: GraphQLInt,
-        workerPlugin,
-        resolve(markdownNode) {
-          return getHTML(markdownNode).then(html => {
+        resolve: resolveWrapper(markdownNode =>
+          getHTML(markdownNode).then(html => {
             let timeToRead = 0
             const pureText = sanitizeHTML(html, { allowTags: [] })
             const avgWPM = 265
@@ -546,7 +542,7 @@ module.exports = (
             }
             return timeToRead
           })
-        },
+        ),
       },
       tableOfContents: {
         type: GraphQLString,
@@ -562,10 +558,7 @@ module.exports = (
             type: GraphQLString,
           },
         },
-        workerPlugin,
-        resolve(markdownNode, args) {
-          return getTableOfContents(markdownNode, args)
-        },
+        resolve: resolveWrapper(getTableOfContents),
       },
       // TODO add support for non-latin languages https://github.com/wooorm/remark/issues/251#issuecomment-296731071
       wordCount: {
@@ -583,8 +576,7 @@ module.exports = (
             },
           },
         }),
-        workerPlugin,
-        resolve(markdownNode) {
+        resolve: resolveWrapper(markdownNode => {
           let counts = {}
 
           unified()
@@ -613,7 +605,7 @@ module.exports = (
               }
             }
           }
-        },
+        }),
       },
     })
   })
