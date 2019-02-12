@@ -26,7 +26,6 @@ const {
 } = require(`./data-tree-utils`)
 const { run: runQuery } = require(`../db/nodes-query`)
 const lazyFields = require(`./lazy-fields`)
-const workerResolvers = require(`./worker-resolvers`)
 
 import type { ProcessedNodeType } from "./infer-graphql-type"
 

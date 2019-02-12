@@ -122,9 +122,7 @@ function getPlugin(pluginName) {
 }
 
 function wrap(pluginName, resolver) {
-  console.log(`wrapping`)
   return async (node, args, context, info) => {
-    console.log(`in wrap`)
     try {
       if (!pool) {
         initPool()
@@ -146,10 +144,7 @@ function wrap(pluginName, resolver) {
   }
 }
 
-const makeWrapper = pluginName => {
-  console.log(`in make wrapper`)
-  return resolver => wrap(pluginName, resolver)
-}
+const makeWrapper = pluginName => resolver => wrap(pluginName, resolver)
 
 module.exports = {
   wrap,

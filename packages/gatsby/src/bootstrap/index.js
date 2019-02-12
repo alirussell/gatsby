@@ -22,7 +22,7 @@ const tracer = require(`opentracing`).globalTracer()
 const preferDefault = require(`./prefer-default`)
 const nodeTracking = require(`../db/node-tracking`)
 require(`../db`).startAutosave()
-const workerResolvers = require(`../schema/worker-resolvers`)
+const workerResolver = require(`../schema/worker-resolver`)
 
 // Show stack trace on unhandled promises.
 process.on(`unhandledRejection`, (reason, p) => {
@@ -384,7 +384,7 @@ module.exports = async (args: BootstrapArgs) => {
     payload: _.flattenDeep([extensions, apiResults]),
   })
 
-  workerResolvers.initPool()
+  workerResolver.initPool()
 
   const graphqlRunner = (query, context = {}) => {
     const schema = store.getState().schema

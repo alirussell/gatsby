@@ -98,7 +98,7 @@ module.exports = (
 
   const getCache = safeGetCache({ cache, getCache: possibleGetCache })
 
-  const resolveWrapper = workerResolver.makeWrapper(`gatsby-transformer-remark`)
+  const workerWrapper = workerResolver.makeWrapper(`gatsby-transformer-remark`)
 
   return new Promise((resolve, reject) => {
     // Setup Remark.
@@ -484,11 +484,11 @@ module.exports = (
     return resolve({
       html: {
         type: GraphQLString,
-        resolve: resolveWrapper(getHTML),
+        resolve: workerWrapper(getHTML),
       },
       htmlAst: {
         type: GraphQLJSON,
-        resolve: resolveWrapper(markdownNode =>
+        resolve: workerWrapper(markdownNode =>
           getHTMLAst(markdownNode).then(ast =>
             hastReparseRaw(stripPosition(_.clone(ast), true))
           )
@@ -510,7 +510,7 @@ module.exports = (
             defaultValue: `plain`,
           },
         },
-        resolve: resolveWrapper(getExcerpt),
+        resolve: workerWrapper(getExcerpt),
       },
       headings: {
         type: new GraphQLList(HeadingType),
@@ -519,7 +519,7 @@ module.exports = (
             type: HeadingLevels,
           },
         },
-        resolve: resolveWrapper((markdownNode, { depth }) =>
+        resolve: workerWrapper((markdownNode, { depth }) =>
           getHeadings(markdownNode).then(headings => {
             if (typeof depth === `number`) {
               headings = headings.filter(heading => heading.depth === depth)
@@ -530,7 +530,7 @@ module.exports = (
       },
       timeToRead: {
         type: GraphQLInt,
-        resolve: resolveWrapper(markdownNode =>
+        resolve: workerWrapper(markdownNode =>
           getHTML(markdownNode).then(html => {
             let timeToRead = 0
             const pureText = sanitizeHTML(html, { allowTags: [] })
@@ -558,7 +558,7 @@ module.exports = (
             type: GraphQLString,
           },
         },
-        resolve: resolveWrapper(getTableOfContents),
+        resolve: workerWrapper(getTableOfContents),
       },
       // TODO add support for non-latin languages https://github.com/wooorm/remark/issues/251#issuecomment-296731071
       wordCount: {
@@ -576,7 +576,7 @@ module.exports = (
             },
           },
         }),
-        resolve: resolveWrapper(markdownNode => {
+        resolve: workerWrapper(markdownNode => {
           let counts = {}
 
           unified()

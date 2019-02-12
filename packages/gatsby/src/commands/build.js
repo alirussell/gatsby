@@ -5,7 +5,7 @@ const buildHTML = require(`./build-html`)
 const buildProductionBundle = require(`./build-javascript`)
 const bootstrap = require(`../bootstrap`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
-const workerResolvers = require(`../schema/worker-resolvers`)
+const workerResolver = require(`../schema/worker-resolver`)
 const { copyStaticDir } = require(`../utils/get-static-dir`)
 const { initTracer, stopTracer } = require(`../utils/tracer`)
 const chalk = require(`chalk`)
@@ -35,7 +35,7 @@ module.exports = async function build(program: BuildArgs) {
     parentSpan: buildSpan,
   })
 
-  workerResolvers.endPool()
+  workerResolver.endPool()
 
   await apiRunnerNode(`onPreBuild`, {
     graphql: graphqlRunner,
