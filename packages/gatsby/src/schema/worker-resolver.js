@@ -111,6 +111,12 @@ function initPool() {
   pool = makeJestWorkerPool()
 }
 
+function endPool() {
+  if (pool) {
+    pool.end()
+  }
+}
+
 // TODO memoize this
 /**
  * Given the name of a plugin, returns the plugin object stored in
@@ -178,4 +184,5 @@ module.exports = {
   wrap,
   makeWrapper,
   initPool,
+  endPool,
 }
