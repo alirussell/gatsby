@@ -68,21 +68,6 @@ function getSitePrefix() {
 // TODO Optimize send plugin options only once
 
 /**
- * Called by jest-worker before a worker function is invoked to
- * determine which worker to send the task too. See
- * https://github.com/facebook/jest/tree/master/packages/jest-worker
- *
- * In this case, we return the node.id so that the same node is always
- * sent to the same worker, ensuring that worker caches are sharded by
- * node ID.
- */
-function computeWorkerKey(method, { node }) {
-  invariant(node, `computeWorkerKey: node not present`)
-  invariant(node.id, `computeWorkerKey: node has no ID`)
-  return node.id
-}
-
-/**
  * Creates and returns a jest-worker pool. Each worker will be setup
  * to handle requests for the supplied fields. See
  * `./resolver-worker.js` for how each worker functions.
@@ -97,7 +82,6 @@ function makeJestWorkerPool() {
     },
     setupArgs,
     exposedMethods: [`execResolver`],
-    computeWorkerKey,
   }
   const workerFile = require.resolve(`./resolver-worker.js`)
   return new Worker(workerFile, workerOptions)
