@@ -121,6 +121,34 @@ function getPlugin(pluginName) {
   return plugins.find(p => p.name === pluginName)
 }
 
+/**
+ * Executes the resolver, passing it the request. Throws an error if
+ * the worker takes longer than `timeout` to respond.
+ */
+function runRequest(request) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(
+        new Error(
+          `worker resolver timed out waiting for ${request.type.name}.${
+            request.fieldName
+          }`
+        )
+      )
+    }, 30000) // TODO should be configurable
+    return pool
+      .execResolver(request)
+      .then(result => {
+        clearTimeout(timeout)
+        resolve(result)
+      })
+      .catch(err => {
+        clearTimeout(timeout)
+        reject(err)
+      })
+  })
+}
+
 function wrap(pluginName, resolver) {
   return async (node, args, context, info) => {
     try {
@@ -136,7 +164,7 @@ function wrap(pluginName, resolver) {
       const { fieldName, parentType } = info
       const type = { name: parentType.name }
       const request = { plugin, type, fieldName, node, args }
-      return await pool.execResolver(request)
+      return await runRequest(request)
     } catch (err) {
       reporter.panicOnBuild(err)
       return null // Never reached. for linter
