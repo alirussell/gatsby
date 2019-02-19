@@ -20,7 +20,16 @@ const slash = require(`slash`)
 // 4. Create the responsive images.
 // 5. Set the html w/ aspect ratio helper.
 module.exports = (
-  { files, markdownNode, markdownAST, pathPrefix, parentNode, reporter, cache },
+  {
+    files,
+    markdownNode,
+    markdownAST,
+    pathPrefix,
+    parentNode,
+    reporter,
+    cache,
+    jobsApi,
+  },
   pluginOptions
 ) => {
   const defaults = {
@@ -100,6 +109,7 @@ module.exports = (
       args: options,
       reporter,
       cache,
+      jobsApi,
     })
 
     if (!fluidResult) {
@@ -163,6 +173,7 @@ module.exports = (
           defaults
         ),
         reporter,
+        jobsApi,
       })
 
       if (!webpFluidResult) {

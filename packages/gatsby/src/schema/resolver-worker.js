@@ -62,6 +62,12 @@ function sendRpc({ name, args, resolve, reject }) {
   process.send([JEST_WORKER_CHILD_MESSAGE_IPC, rpc])
 }
 
+function sendAndForget({ name, args }) {
+  invariant(name, `rpc name`)
+  const message = { name, args }
+  process.send([JEST_WORKER_CHILD_MESSAGE_IPC, message])
+}
+
 function makeRpc(fnName) {
   return (...args) =>
     new Promise((resolve, reject) => {
@@ -124,6 +130,17 @@ function makeUnsupportedProps(o, props) {
   return o
 }
 
+const makeSendAndForget = fnName => (...args) =>
+  sendAndForget({ name: fnName, args })
+
+function makeJobsApi() {
+  return {
+    create: makeSendAndForget(`actions.createJob`),
+    set: makeSendAndForget(`actions.setJob`),
+    end: makeSendAndForget(`actions.endJob`),
+  }
+}
+
 /**
  * GraphQL fields are normally created by plugins during the
  * `setFieldsOnGraphQLNodeType` API, and as such they expect API
@@ -149,6 +166,7 @@ function makeApi({ type, setupArgs, plugin }) {
     // createNodeId: namespacedCreateNodeId,
     // TODO remember to remove from unsupported
     reporter: makeReporter(),
+    jobsApi: makeJobsApi(plugin),
     type,
     pathPrefix,
     workerResolver,

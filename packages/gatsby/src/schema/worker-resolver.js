@@ -4,6 +4,7 @@ const reporter = require(`gatsby-cli/lib/reporter`)
 const Worker = require(`@moocar/jest-worker`).default
 const invariant = require(`invariant`)
 const nodesAPI = require(`../db/nodes`)
+const { boundActionCreators } = require(`../redux/actions`)
 
 // From jest-worker library `src/types.js`
 const JEST_WORKER_PARENT_MESSAGE_IPC = 3
@@ -22,6 +23,7 @@ function reporterHandler({ fnName, args }) {
 
 const rpcMethods = {
   ...nodesAPI,
+  actions: boundActionCreators,
   reporter: reporterHandler,
 }
 
@@ -45,7 +47,7 @@ function ipcCallback(child, request) {
   )
   const { name, args, id } = rpc
   invariant(name, `RPC should contain the name of the RPC being called`)
-  const response = rpcMethods[name].apply(null, args)
+  const response = _.get(rpcMethods, name).apply(null, args)
   // Only respond if id is present (this means the message was an RPC)
   if (id) {
     const replyMessage = {

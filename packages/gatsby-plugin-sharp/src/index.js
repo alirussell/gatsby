@@ -31,16 +31,6 @@ const getImageSize = file => {
 
 const duotone = require(`./duotone`)
 
-// Bound action creators should be set when passed to onPreInit in gatsby-node.
-// ** It is NOT safe to just directly require the gatsby module **.
-// There is no guarantee that the module resolved is the module executing!
-// This can occur in mono repos depending on how dependencies have been hoisted.
-// The direct require has been left only to avoid breaking changes.
-let { boundActionCreators } = require(`gatsby/dist/redux/actions`)
-exports.setBoundActionCreators = actions => {
-  boundActionCreators = actions
-}
-
 /// Plugin options are loaded onPreInit in gatsby-node
 const pluginDefaults = {
   useMozJpeg: process.env.GATSBY_JPEG_ENCODER === `MOZJPEG`,
@@ -124,7 +114,7 @@ const healOptions = (args, defaultArgs) => {
 }
 
 let totalJobs = 0
-const processFile = (file, jobs, cb, reporter) => {
+const processFile = (file, jobs, cb, { reporter, jobsApi }) => {
   // console.log("totalJobs", totalJobs)
   bar.total = totalJobs
 
@@ -218,13 +208,15 @@ const processFile = (file, jobs, cb, reporter) => {
     const onFinish = err => {
       imagesFinished += 1
       bar.tick()
-      boundActionCreators.setJob(
-        {
-          id: `processing image ${job.file.absolutePath}`,
-          imagesFinished,
-        },
-        { name: `gatsby-plugin-sharp` }
-      )
+      if (jobsApi) {
+        jobsApi.set(
+          {
+            id: `processing image ${job.file.absolutePath}`,
+            imagesFinished,
+          },
+          { name: `gatsby-plugin-sharp` }
+        )
+      }
 
       if (err) {
         reportError(`Failed to process image ${file}`, err, reporter)
@@ -316,7 +308,7 @@ const q = queue((task, callback) => {
   task(callback)
 }, 1)
 
-const queueJob = (job, reporter) => {
+const queueJob = (job, { reporter, jobsApi }) => {
   const inputFileKey = job.file.absolutePath.replace(/\./g, `%2E`)
   const outputFileKey = job.outputPath.replace(/\./g, `%2E`)
   const jobPath = `${inputFileKey}.${outputFileKey}`
@@ -345,33 +337,37 @@ const queueJob = (job, reporter) => {
       const jobs = _.values(toProcess[inputFileKey])
       // Delete the input key from the toProcess list so more jobs can be queued.
       delete toProcess[inputFileKey]
-      boundActionCreators.createJob(
-        {
-          id: `processing image ${job.file.absolutePath}`,
-          imagesCount: _.values(toProcess[inputFileKey]).length,
-        },
-        { name: `gatsby-plugin-sharp` }
-      )
+      if (jobsApi) {
+        jobsApi.create(
+          {
+            id: `processing image ${job.file.absolutePath}`,
+            imagesCount: _.values(toProcess[inputFileKey]).length,
+          },
+          { name: `gatsby-plugin-sharp` }
+        )
+      }
       // We're now processing the file's jobs.
       processFile(
         job.file.absolutePath,
         jobs,
         () => {
-          boundActionCreators.endJob(
-            {
-              id: `processing image ${job.file.absolutePath}`,
-            },
-            { name: `gatsby-plugin-sharp` }
-          )
+          if (jobsApi) {
+            jobsApi.end(
+              {
+                id: `processing image ${job.file.absolutePath}`,
+              },
+              { name: `gatsby-plugin-sharp` }
+            )
+          }
           cb()
         },
-        reporter
+        { reporter, jobsApi }
       )
     })
   }
 }
 
-function queueImageResizing({ file, args = {}, reporter }) {
+function queueImageResizing({ file, args = {}, reporter, jobsApi }) {
   const options = healOptions(args, {})
   // Filter out false args, and args not for this extension and put width at
   // end (for the file path)
@@ -454,7 +450,7 @@ function queueImageResizing({ file, args = {}, reporter }) {
     outputPath: filePath,
   }
 
-  queueJob(job, reporter)
+  queueJob(job, { reporter, jobsApi })
 
   // encode the file name for URL
   const encodedImgSrc = `/${encodeURIComponent(file.name)}.${fileExtension}`
@@ -557,7 +553,7 @@ async function base64(arg) {
   return await memoizedBase64(arg)
 }
 
-async function fluid({ file, args = {}, reporter, cache }) {
+async function fluid({ file, args = {}, reporter, cache, jobsApi }) {
   const options = healOptions(args, {})
   // Account for images with a high pixel density. We assume that these types of
   // images are intended to be displayed at their native resolution.
@@ -669,6 +665,7 @@ async function fluid({ file, args = {}, reporter, cache }) {
       file,
       args: arrrgs, // matey
       reporter,
+      jobsApi,
     })
   })
 
