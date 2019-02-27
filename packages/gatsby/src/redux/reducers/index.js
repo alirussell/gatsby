@@ -44,4 +44,7 @@ module.exports = {
   jsonDataPaths: require(`./json-data-paths`),
   thirdPartySchemas: require(`./third-party-schemas`),
   themes: require(`./themes`),
+
+  // Incremental builds
+  depGraph: require(`../../incremental/reducer`),
 }
