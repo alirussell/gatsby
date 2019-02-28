@@ -93,7 +93,8 @@ exports.sourceNodes = ({ createContentDigest, actions, store }) => {
       port: state.program.port,
       host: state.program.host,
       ...configCopy,
-      buildTime,
+      // TODO Figure out how to put buildTime somewhere
+      // buildTime,
     }
     createNode({
       ...node,

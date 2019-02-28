@@ -51,6 +51,37 @@ type BootstrapArgs = {
   parentSpan: Object,
 }
 
+async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
+  // Collect pages.
+  activity = report.activityTimer(`createPages`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunnerNode(`createPages`, {
+    graphql: graphqlRunner,
+    traceId: `initial-createPages`,
+    waitForCascadingActions: true,
+    parentSpan: activity.span,
+  })
+  activity.end()
+
+  // A variant on createPages for plugins that want to
+  // have full control over adding/removing pages. The normal
+  // "createPages" API is called every time (during development)
+  // that data changes.
+  activity = report.activityTimer(`createPagesStatefully`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunnerNode(`createPagesStatefully`, {
+    graphql: graphqlRunner,
+    traceId: `initial-createPagesStatefully`,
+    waitForCascadingActions: true,
+    parentSpan: activity.span,
+  })
+  activity.end()
+}
+
 module.exports = async (args: BootstrapArgs) => {
   const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
   const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
@@ -388,34 +419,7 @@ module.exports = async (args: BootstrapArgs) => {
     return graphql(schema, query, context, context, context)
   }
 
-  // Collect pages.
-  activity = report.activityTimer(`createPages`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await apiRunnerNode(`createPages`, {
-    graphql: graphqlRunner,
-    traceId: `initial-createPages`,
-    waitForCascadingActions: true,
-    parentSpan: activity.span,
-  })
-  activity.end()
-
-  // A variant on createPages for plugins that want to
-  // have full control over adding/removing pages. The normal
-  // "createPages" API is called every time (during development)
-  // that data changes.
-  activity = report.activityTimer(`createPagesStatefully`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await apiRunnerNode(`createPagesStatefully`, {
-    graphql: graphqlRunner,
-    traceId: `initial-createPagesStatefully`,
-    waitForCascadingActions: true,
-    parentSpan: activity.span,
-  })
-  activity.end()
+  createPages({ activity, bootstrapSpan, graphqlRunner })
 
   activity = report.activityTimer(`onPreExtractQueries`, {
     parentSpan: bootstrapSpan,

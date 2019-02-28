@@ -3,12 +3,15 @@ const _ = require(`lodash`)
 const fs = require(`fs`)
 const mitt = require(`mitt`)
 const stringify = require(`json-stringify-safe`)
+const Flags = require(`../incremental/flags`)
+
+const flags = new Flags()
 
 // Create event emitter for actions
 const emitter = mitt()
 
 // Reducers
-const reducers = require(`./reducers`)
+const reducers = require(`./reducers`)({ flags })
 
 const objectToMap = obj => {
   let map = new Map()
@@ -79,6 +82,7 @@ function saveState() {
     `config`,
     `nodes`,
     `status`,
+    `depGraph`,
     `componentDataDependencies`,
     `jsonDataPaths`,
     `components`,
@@ -110,3 +114,5 @@ exports.emitter = emitter
 
 /** Redux store */
 exports.store = store
+
+exports.flags = flags

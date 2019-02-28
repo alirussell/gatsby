@@ -1,8 +1,5 @@
 const reduxNodes = require(`./nodes`)
 const lokiNodes = require(`../../db/loki/nodes`).reducer
-const Flags = require(`../../incremental/flags`)
-
-const flags = new Flags()
 
 const backend = process.env.GATSBY_DB_NODES || `redux`
 
@@ -23,7 +20,7 @@ function getNodesReducer() {
   return nodesReducer
 }
 
-module.exports = {
+module.exports = ({ flags }) => ({
   program: require(`./program`),
   nodes: getNodesReducer(),
   nodesByType: require(`./nodes-by-type`),
@@ -50,4 +47,4 @@ module.exports = {
 
   // Incremental builds
   depGraph: require(`../../incremental/reducer`)({ flags }),
-}
+})

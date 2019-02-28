@@ -26,6 +26,8 @@ const {
 } = require(`./data-tree-utils`)
 const { run: runQuery } = require(`../db/nodes-query`)
 const lazyFields = require(`./lazy-fields`)
+const createContentDigest = require(`../utils/create-content-digest`)
+const { store } = require(`../redux`)
 
 import type { ProcessedNodeType } from "./infer-graphql-type"
 
@@ -253,6 +255,21 @@ async function buildAll({ parentSpan }) {
         node => node.internal && !node.internal.ignoreType
       )
       if (!nodes.length) return
+
+      // calculate and save example values. These will be cached so
+      // won't be calculated again during this build
+      const exampleValue = getExampleValues({ nodes, typeName })
+      const hash = createContentDigest(exampleValue)
+      if (store.getState().depGraph.exampleValues[typeName] !== hash) {
+        console.log(`saving hash`, typeName, hash)
+        store.dispatch({
+          type: `SET_DEP_EXAMPLE_VALUE_HASH`,
+          payload: {
+            type: typeName,
+            hash,
+          },
+        })
+      }
 
       const fieldName = _.camelCase(typeName)
       const processedType = await buildProcessedType({
