@@ -9,6 +9,7 @@ const { copyStaticDir } = require(`../utils/get-static-dir`)
 const { initTracer, stopTracer } = require(`../utils/tracer`)
 const chalk = require(`chalk`)
 const tracer = require(`opentracing`).globalTracer()
+const incrementalBuild = require(`../incremental`)
 
 function reportFailure(msg, err: Error) {
   report.log(``)
@@ -23,12 +24,7 @@ type BuildArgs = {
   openTracingConfigFile: string,
 }
 
-module.exports = async function build(program: BuildArgs) {
-  initTracer(program.openTracingConfigFile)
-
-  const buildSpan = tracer.startSpan(`build`)
-  buildSpan.setTag(`directory`, program.directory)
-
+async function fullBuild({ program, buildSpan }) {
   const { graphqlRunner } = await bootstrap({
     ...program,
     parentSpan: buildSpan,
@@ -78,6 +74,19 @@ module.exports = async function build(program: BuildArgs) {
     graphql: graphqlRunner,
     parentSpan: buildSpan,
   })
+}
+
+module.exports = async function build(program: BuildArgs) {
+  initTracer(program.openTracingConfigFile)
+
+  const buildSpan = tracer.startSpan(`build`)
+  buildSpan.setTag(`directory`, program.directory)
+
+  if (process.env.INCREMENTAL == `true`) {
+    await incrementalBuild({ buildSpan })
+  } else {
+    await fullBuild({ program, buildSpan })
+  }
 
   report.info(`Done building in ${process.uptime()} sec`)
 

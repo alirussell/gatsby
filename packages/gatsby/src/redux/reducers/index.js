@@ -1,5 +1,8 @@
 const reduxNodes = require(`./nodes`)
 const lokiNodes = require(`../../db/loki/nodes`).reducer
+const Flags = require(`../../incremental/flags`)
+
+const flags = new Flags()
 
 const backend = process.env.GATSBY_DB_NODES || `redux`
 
@@ -46,5 +49,5 @@ module.exports = {
   themes: require(`./themes`),
 
   // Incremental builds
-  depGraph: require(`../../incremental/reducer`),
+  depGraph: require(`../../incremental/reducer`)({ flags }),
 }

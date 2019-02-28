@@ -75,6 +75,8 @@ const store = Redux.createStore(
 function saveState() {
   const state = store.getState()
   const pickedState = _.pick(state, [
+    `program`,
+    `config`,
     `nodes`,
     `status`,
     `componentDataDependencies`,
