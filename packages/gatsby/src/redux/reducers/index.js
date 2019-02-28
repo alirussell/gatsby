@@ -20,31 +20,33 @@ function getNodesReducer() {
   return nodesReducer
 }
 
-module.exports = ({ flags }) => ({
-  program: require(`./program`),
-  nodes: getNodesReducer(),
-  nodesByType: require(`./nodes-by-type`),
-  resolvedNodesCache: require(`./resolved-nodes`),
-  nodesTouched: require(`./nodes-touched`),
-  lastAction: require(`./last-action`),
-  plugins: require(`./plugins`),
-  flattenedPlugins: require(`./flattened-plugins`),
-  apiToPlugins: require(`./api-to-plugins`),
-  config: require(`./config`),
-  pages: require(`./pages`),
-  schema: require(`./schema`),
-  status: require(`./status`),
-  componentDataDependencies: require(`./component-data-dependencies`),
-  components: require(`./components`),
-  staticQueryComponents: require(`./static-query-components`),
-  jobs: require(`./jobs`),
-  webpack: require(`./webpack`),
-  redirects: require(`./redirects`),
-  babelrc: require(`./babelrc`),
-  jsonDataPaths: require(`./json-data-paths`),
-  thirdPartySchemas: require(`./third-party-schemas`),
-  themes: require(`./themes`),
+module.exports = ({ flags }) => {
+  return {
+    program: require(`./program`),
+    nodes: getNodesReducer(),
+    nodesByType: require(`./nodes-by-type`),
+    resolvedNodesCache: require(`./resolved-nodes`),
+    nodesTouched: require(`./nodes-touched`),
+    lastAction: require(`./last-action`),
+    plugins: require(`./plugins`),
+    flattenedPlugins: require(`./flattened-plugins`),
+    apiToPlugins: require(`./api-to-plugins`),
+    config: require(`./config`),
+    pages: require(`./pages`),
+    schema: require(`./schema`),
+    status: require(`./status`),
+    componentDataDependencies: require(`./component-data-dependencies`),
+    components: require(`./components`),
+    staticQueryComponents: require(`./static-query-components`),
+    jobs: require(`./jobs`),
+    webpack: require(`./webpack`),
+    redirects: require(`./redirects`),
+    babelrc: require(`./babelrc`),
+    jsonDataPaths: require(`./json-data-paths`),
+    thirdPartySchemas: require(`./third-party-schemas`),
+    themes: require(`./themes`),
 
-  // Incremental builds
-  depGraph: require(`../../incremental/reducer`)({ flags }),
-})
+    // Incremental builds
+    depGraph: require(`../../incremental/reducer`)({ flags }),
+  }
+}

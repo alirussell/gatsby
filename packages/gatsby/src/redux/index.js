@@ -83,6 +83,7 @@ function saveState() {
     `nodes`,
     `status`,
     `depGraph`,
+    `pages`,
     `componentDataDependencies`,
     `jsonDataPaths`,
     `components`,
