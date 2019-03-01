@@ -261,7 +261,6 @@ async function buildAll({ parentSpan }) {
       const exampleValue = getExampleValues({ nodes, typeName })
       const hash = createContentDigest(exampleValue)
       if (store.getState().depGraph.exampleValues[typeName] !== hash) {
-        console.log(`saving hash`, typeName, hash)
         store.dispatch({
           type: `SET_DEP_EXAMPLE_VALUE_HASH`,
           payload: {

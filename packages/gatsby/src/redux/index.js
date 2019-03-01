@@ -47,6 +47,9 @@ try {
   if (initialState.components) {
     initialState.components = objectToMap(initialState.components)
   }
+  if (initialState.pages) {
+    initialState.pages = objectToMap(initialState.pages)
+  }
   if (initialState.nodes) {
     initialState.nodes = objectToMap(initialState.nodes)
 
@@ -95,6 +98,7 @@ function saveState() {
   )
   pickedState.components = mapToObject(pickedState.components)
   pickedState.nodes = pickedState.nodes ? mapToObject(pickedState.nodes) : []
+  pickedState.pages = pickedState.pages ? mapToObject(pickedState.pages) : []
   const stringified = stringify(pickedState, null, 2)
   fs.writeFile(
     `${process.cwd()}/.cache/redux-state.json`,

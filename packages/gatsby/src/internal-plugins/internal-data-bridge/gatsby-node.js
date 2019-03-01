@@ -144,6 +144,7 @@ exports.onCreatePage = ({ createContentDigest, page, actions }) => {
     internal: {
       type: `SitePage`,
       contentDigest: createContentDigest(pageWithoutUpdated),
+      ___gatsbyDependsOnPage: page.path,
       description:
         page.pluginCreatorId === `Plugin default-site-plugin`
           ? `Your site's "gatsby-node.js"`
@@ -156,5 +157,7 @@ exports.onCreatePage = ({ createContentDigest, page, actions }) => {
 emitter.on(`DELETE_PAGE`, action => {
   const nodeId = createPageId(action.payload.path)
   const node = getNode(nodeId)
-  boundActionCreators.deleteNode({ node })
+  if (node) {
+    boundActionCreators.deleteNode({ node })
+  }
 })

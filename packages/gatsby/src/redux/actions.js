@@ -9,7 +9,7 @@ const path = require(`path`)
 const fs = require(`fs`)
 const url = require(`url`)
 const kebabHash = require(`kebab-hash`)
-const { hasNodeChanged, getNode } = require(`../db/nodes`)
+const { hasNodeChanged, getNode, getNodeDependsOnPage } = require(`../db/nodes`)
 const { trackInlineObjectsInRootNode } = require(`../db/node-tracking`)
 const { store } = require(`./index`)
 const fileExistsSync = require(`fs-exists-cached`).sync
@@ -72,10 +72,17 @@ type ActionOptions = {
  * deletePage(page)
  */
 actions.deletePage = (page: PageInput) => {
-  return {
+  const returnActions = []
+  const dependentNode = getNodeDependsOnPage(page.path)
+  if (dependentNode) {
+    console.log(`found dependent node. Deleting`, page.path, dependentNode.id)
+    returnActions.push(actions.deleteNode({ node: dependentNode }))
+  }
+  returnActions.push({
     type: `DELETE_PAGE`,
     payload: page,
-  }
+  })
+  return returnActions
 }
 
 const pascalCase = _.flow(
@@ -298,12 +305,24 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
   const contextModified =
     !!oldPage && !_.isEqual(oldPage.context, internalPage.context)
 
-  return {
-    ...actionOptions,
-    type: `CREATE_PAGE`,
-    contextModified,
-    plugin,
-    payload: internalPage,
+  const changeKeys = [`component`, `context`]
+  const hasChanged =
+    !oldPage ||
+    !_.isEqual(_.pick(oldPage, changeKeys), _.pick(internalPage, changeKeys))
+
+  if (hasChanged) {
+    return {
+      ...actionOptions,
+      type: `CREATE_PAGE`,
+      contextModified,
+      plugin,
+      payload: internalPage,
+    }
+  } else {
+    return {
+      type: `TOUCH_PAGE`,
+      payload: internalPage,
+    }
   }
 }
 
@@ -581,42 +600,35 @@ actions.createNode = (
     actionOptions.parentSpan.setTag(`nodeType`, node.id)
   }
 
-  let deleteAction
-  let updateNodeAction
+  const reduxActions = []
   // Check if the node has already been processed.
   if (oldNode && !hasNodeChanged(node.id, node.internal.contentDigest)) {
-    updateNodeAction = {
+    reduxActions.push({
       type: `TOUCH_NODE`,
       plugin,
       ...actionOptions,
       payload: node.id,
-    }
+    })
   } else {
     // Remove any previously created descendant nodes as they're all due
     // to be recreated.
     if (oldNode) {
       const descendantNodes = findChildrenRecursively(oldNode.children)
-      if (descendantNodes.length > 0) {
-        deleteAction = descendantNodes.map(n =>
-          actions.deleteNode({ node: getNode(n) })
-        )
-      }
+      descendantNodes.forEach(n => {
+        reduxActions.push(actions.deleteNode({ node: getNode(n) }))
+      })
     }
 
-    updateNodeAction = {
+    reduxActions.push({
       type: `CREATE_NODE`,
       plugin,
       oldNode,
       ...actionOptions,
       payload: node,
-    }
+    })
   }
 
-  if (deleteAction) {
-    return [deleteAction, updateNodeAction]
-  } else {
-    return updateNodeAction
-  }
+  return reduxActions
 }
 
 /**

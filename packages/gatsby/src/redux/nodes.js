@@ -80,3 +80,8 @@ exports.getNodeAndSavePathDependency = (id, path) => {
   createPageDependency({ path, nodeId: id })
   return node
 }
+
+exports.getNodeDependsOnPage = pagePath => {
+  const nodeId = store.getState().depGraph.pageDependsOnNode[pagePath]
+  return nodeId ? getNode(nodeId) : undefined
+}

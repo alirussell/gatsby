@@ -4,6 +4,8 @@ class Flags {
   constructor() {
     this.nodeTypeCollections = {}
     this.nodes = new Set()
+    this.schema = false
+    this.queryJobs = new Set()
   }
   nodeTypeCollection(type, id) {
     _.update(this.nodeTypeCollections, type, fooSet =>
@@ -12,6 +14,12 @@ class Flags {
   }
   node(id) {
     this.nodes.add(id)
+  }
+  schemaDirty() {
+    this.schema = true
+  }
+  queryJob(pathOrJsonName) {
+    this.queryJobs.add(pathOrJsonName)
   }
 }
 

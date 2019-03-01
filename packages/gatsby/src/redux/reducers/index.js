@@ -33,6 +33,7 @@ module.exports = ({ flags }) => {
     apiToPlugins: require(`./api-to-plugins`),
     config: require(`./config`),
     pages: require(`./pages`),
+    pagesTouched: require(`./pages-touched`),
     schema: require(`./schema`),
     status: require(`./status`),
     componentDataDependencies: require(`./component-data-dependencies`),
