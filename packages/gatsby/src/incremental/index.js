@@ -12,7 +12,8 @@ const createContentDigest = require(`../utils/create-content-digest`)
 const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
-const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`).default
+const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`)
+  .default
 require(`../db`).startAutosave()
 
 async function initLoki({ cacheDirectory }) {
