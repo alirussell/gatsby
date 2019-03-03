@@ -1,29 +1,18 @@
 import _ from "lodash"
-import crypto from "crypto"
 import fs from "fs-extra"
-import { store, emitter } from "../../redux/"
+import { store, emitter, flags } from "../../redux/"
 import { joinPath } from "../../utils/path"
-
-let lastHash = null
 
 const writeRedirects = async () => {
   bootstrapFinished = true
 
+  if (!flags.redirectsChanged) {
+    return Promise.resolve()
+  }
   let { program, redirects } = store.getState()
 
   // Filter for redirects that are meant for the browser.
   const browserRedirects = redirects.filter(r => r.redirectInBrowser)
-
-  const newHash = crypto
-    .createHash(`md5`)
-    .update(JSON.stringify(browserRedirects))
-    .digest(`hex`)
-
-  if (newHash === lastHash) {
-    return Promise.resolve()
-  }
-
-  lastHash = newHash
 
   return await fs.writeFile(
     joinPath(program.directory, `.cache/redirects.json`),

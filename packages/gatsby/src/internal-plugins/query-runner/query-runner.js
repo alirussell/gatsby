@@ -10,8 +10,7 @@ const { store } = require(`../../redux`)
 const { generatePathChunkName } = require(`../../utils/js-chunk-names`)
 const { formatErrorDetails } = require(`./utils`)
 const mod = require(`hash-mod`)(999)
-
-const resultHashes = {}
+const debug = require(`debug`)(`gatsby:query-runner`)
 
 type QueryJob = {
   id: string,
@@ -84,17 +83,6 @@ ${formatErrorDetails(errorDetails)}`)
     .createHash(`sha1`)
     .update(resultJSON)
     .digest(`base64`)
-    // Remove potentially unsafe characters. This increases chances of collisions
-    // slightly but it should still be very safe + we get a shorter
-    // url vs hex.
-    .replace(/[^a-zA-Z0-9-_]/g, ``)
-
-  let dataPath
-  if (queryJob.isPage) {
-    dataPath = `${generatePathChunkName(queryJob.jsonName)}-${resultHash}`
-  } else {
-    dataPath = queryJob.hash
-  }
 
   if (process.env.gatsby_executing_command === `develop`) {
     if (queryJob.isPage) {
@@ -110,42 +98,68 @@ ${formatErrorDetails(errorDetails)}`)
     }
   }
 
-  if (resultHashes[queryJob.id] !== resultHash) {
-    resultHashes[queryJob.id] = resultHash
-    let modInt = ``
-    // We leave StaticQuery results at public/static/d
-    // as the babel plugin has that path hard-coded
-    // for importing static query results.
-    if (queryJob.isPage) {
-      modInt = mod(dataPath).toString()
-    }
+  const existingResult = store.getState().depGraph.queryResults[queryJob.id]
 
-    // Always write file to public/static/d/ folder.
-    const resultPath = path.join(
-      program.directory,
-      `public`,
-      `static`,
-      `d`,
-      modInt,
-      `${dataPath}.json`
-    )
-
-    if (queryJob.isPage) {
-      dataPath = `${modInt}/${dataPath}`
-    }
-
-    await fs.outputFile(resultPath, resultJSON)
-
-    store.dispatch({
-      type: `SET_JSON_DATA_PATH`,
-      payload: {
-        key: queryJob.jsonName,
-        value: dataPath,
-      },
-    })
-
+  // If no change, then nothing to do
+  if (existingResult && existingResult.hash === resultHash) {
     return result
   }
+
+  debug(`query result changed`, queryJob.id)
+
+  store.dispatch({
+    type: `SET_QUERY_RESULT_HASH`,
+    payload: {
+      id: queryJob.id,
+      hash: resultHash,
+      isStatic: !queryJob.isPage,
+    },
+  })
+
+  // Remove potentially unsafe characters. This increases chances of
+  // collisions slightly but it should still be very safe + we get a
+  // shorter url vs hex.
+  const readableResultHash = resultHash.replace(/[^a-zA-Z0-9-_]/g, ``)
+
+  let dataPath
+  if (queryJob.isPage) {
+    dataPath = `${generatePathChunkName(queryJob.jsonName)}-${readableResultHash}`
+  } else {
+    dataPath = queryJob.hash
+  }
+
+  let modInt = ``
+  // We leave StaticQuery results at public/static/d
+  // as the babel plugin has that path hard-coded
+  // for importing static query results.
+  if (queryJob.isPage) {
+    modInt = mod(dataPath).toString()
+  }
+
+  // Always write file to public/static/d/ folder.
+  const resultPath = path.join(
+    program.directory,
+    `public`,
+    `static`,
+    `d`,
+    modInt,
+    `${dataPath}.json`
+  )
+
+  if (queryJob.isPage) {
+    dataPath = `${modInt}/${dataPath}`
+  }
+
+  await fs.outputFile(resultPath, resultJSON)
+
+  // This will eventually go away
+  store.dispatch({
+    type: `SET_JSON_DATA_PATH`,
+    payload: {
+      key: queryJob.jsonName,
+      value: dataPath,
+    },
+  })
 
   return result
 }

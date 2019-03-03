@@ -1,11 +1,13 @@
 const _ = require(`lodash`)
 
-module.exports = (state = [], action) => {
+module.exports = ({ flags }) => (state = [], action) => {
   switch (action.type) {
     case `CREATE_REDIRECT`: {
-      if (!state.some(redirect => _.isEqual(redirect, action.payload))) {
+      const redirect = action.payload
+      if (!state.some(r => _.isEqual(r, redirect))) {
         // Add redirect only if it wasn't yet added to prevent duplicates
-        return [...state, action.payload]
+        flags.redirects()
+        return [...state, redirect]
       }
       return state
     }

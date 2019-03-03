@@ -12,8 +12,12 @@ const createContentDigest = require(`../utils/create-content-digest`)
 const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
+const {
+  runQueriesForPathnames,
+} = require(`../internal-plugins/query-runner/page-query-runner`)
 const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`)
   .default
+const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writer`)
 require(`../db`).startAutosave()
 
 async function initLoki({ cacheDirectory }) {
@@ -114,7 +118,6 @@ function saveQuery(components, component, query) {
       hash: query.hash,
     })
     boundActionCreators.deleteComponentsDependencies([query.jsonName])
-    // If this is page query
   } else if (components.has(component)) {
     boundActionCreators.replaceComponentQuery({
       query: query.text,
@@ -153,6 +156,18 @@ async function runQueries({ activity, bootstrapSpan }) {
       flags.queryJob(jsonName)
     }
   }
+
+  await runQueriesForPathnames(Array.from(flags.queryJobs))
+}
+
+async function writeRedirects({ activity, bootstrapSpan }) {
+  // Write out redirects.
+  activity = report.activityTimer(`write out redirect data`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await redirectsWriter.writeRedirects()
+  activity.end()
 }
 
 async function build({ parentSpan }) {
@@ -223,6 +238,8 @@ async function build({ parentSpan }) {
   await createPages({ activity, bootstrapSpan, graphqlRunner })
 
   await runQueries({ activity, bootstrapSpan })
+
+  await writeRedirects({ activity, bootstrapSpan })
 }
 
 module.exports = build

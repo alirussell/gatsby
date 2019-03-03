@@ -186,6 +186,8 @@ const runQueriesForPathnames = pathnames => {
   })
 }
 
+exports.runQueriesForPathnames = runQueriesForPathnames
+
 const findDirtyIds = actions => {
   const state = store.getState()
   const uniqDirties = _.uniq(

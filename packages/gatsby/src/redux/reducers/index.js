@@ -41,7 +41,7 @@ module.exports = ({ flags }) => {
     staticQueryComponents: require(`./static-query-components`),
     jobs: require(`./jobs`),
     webpack: require(`./webpack`),
-    redirects: require(`./redirects`),
+    redirects: require(`./redirects`)({ flags }),
     babelrc: require(`./babelrc`),
     jsonDataPaths: require(`./json-data-paths`),
     thirdPartySchemas: require(`./third-party-schemas`),

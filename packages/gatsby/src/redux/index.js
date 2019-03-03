@@ -91,6 +91,7 @@ function saveState() {
     `jsonDataPaths`,
     `components`,
     `staticQueryComponents`,
+    `redirects`,
   ])
 
   pickedState.staticQueryComponents = mapToObject(
