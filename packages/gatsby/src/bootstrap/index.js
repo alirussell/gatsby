@@ -419,7 +419,7 @@ module.exports = async (args: BootstrapArgs) => {
     return graphql(schema, query, context, context, context)
   }
 
-  createPages({ activity, bootstrapSpan, graphqlRunner })
+  await createPages({ activity, bootstrapSpan, graphqlRunner })
 
   activity = report.activityTimer(`onPreExtractQueries`, {
     parentSpan: bootstrapSpan,
