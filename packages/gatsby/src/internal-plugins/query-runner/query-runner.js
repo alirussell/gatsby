@@ -123,7 +123,9 @@ ${formatErrorDetails(errorDetails)}`)
 
   let dataPath
   if (queryJob.isPage) {
-    dataPath = `${generatePathChunkName(queryJob.jsonName)}-${readableResultHash}`
+    dataPath = `${generatePathChunkName(
+      queryJob.jsonName
+    )}-${readableResultHash}`
   } else {
     dataPath = queryJob.hash
   }
