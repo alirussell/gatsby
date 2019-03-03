@@ -21,6 +21,7 @@ const getConfigFile = require(`./get-config-file`)
 const tracer = require(`opentracing`).globalTracer()
 const preferDefault = require(`./prefer-default`)
 const nodeTracking = require(`../db/node-tracking`)
+const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 require(`../db`).startAutosave()
 
 // Show stack trace on unhandled promises.
@@ -486,6 +487,14 @@ module.exports = async (args: BootstrapArgs) => {
   })
   activity.start()
   await writeRedirects()
+  activity.end()
+
+  // Write out matchPaths.json
+  activity = report.activityTimer(`write out match paths`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await pagesWriter.writeMatchPaths()
   activity.end()
 
   const checkJobsDone = _.debounce(resolve => {

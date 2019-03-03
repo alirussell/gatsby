@@ -8,6 +8,7 @@ class Flags {
     this.queryResults = new Set()
     this.staticQueryChanged = false
     this.redirectsChanged = false
+    this.matchPathsChanged = false
   }
   nodeTypeCollection(type, id) {
     _.update(this.nodeTypeCollections, type, fooSet =>
@@ -28,6 +29,9 @@ class Flags {
   }
   redirects() {
     this.redirectsChanged = true
+  }
+  matchPaths() {
+    this.matchPathsChanged = true
   }
 }
 

@@ -239,12 +239,14 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
     jsonName,
     internalComponentName,
     path: page.path,
-    matchPath: page.matchPath,
     component: page.component,
     componentChunkName: generateComponentChunkName(page.component),
     // Ensure the page has a context object
     context: page.context || {},
     updatedAt: Date.now(),
+  }
+  if (page.matchPath) {
+    internalPage.matchPath = page.matchPath
   }
 
   // If the path doesn't have an initial forward slash, add it.
@@ -305,7 +307,7 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
   const contextModified =
     !!oldPage && !_.isEqual(oldPage.context, internalPage.context)
 
-  const changeKeys = [`component`, `context`]
+  const changeKeys = [`component`, `context`, `matchPath`]
   const hasChanged =
     !oldPage ||
     !_.isEqual(_.pick(oldPage, changeKeys), _.pick(internalPage, changeKeys))
@@ -317,6 +319,7 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
       contextModified,
       plugin,
       payload: internalPage,
+      oldPage,
     }
   } else {
     return {

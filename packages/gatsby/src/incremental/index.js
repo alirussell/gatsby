@@ -12,6 +12,7 @@ const createContentDigest = require(`../utils/create-content-digest`)
 const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
+const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const {
   runQueriesForPathnames,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
@@ -240,6 +241,14 @@ async function build({ parentSpan }) {
   await runQueries({ activity, bootstrapSpan })
 
   await writeRedirects({ activity, bootstrapSpan })
+
+  // Write out matchPaths.json
+  activity = report.activityTimer(`write out match paths`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await pagesWriter.writeMatchPaths()
+  activity.end()
 }
 
 module.exports = build

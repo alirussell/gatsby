@@ -1,8 +1,9 @@
 const _ = require(`lodash`)
 const fs = require(`fs-extra`)
 const crypto = require(`crypto`)
+const debug = require(`debug`)(`gatsby:pages-writer`)
 
-const { store, emitter } = require(`../../redux/`)
+const { store, emitter, flags } = require(`../../redux/`)
 
 import { joinPath } from "../../utils/path"
 
@@ -144,6 +145,21 @@ const resetLastHash = () => {
 }
 
 exports.resetLastHash = resetLastHash
+
+async function writeMatchPaths() {
+  if (!flags.matchPathsChanged) {
+    return Promise.resolve()
+  }
+  debug(`match paths changed. Writing matchPaths.json`)
+  let { program, depGraph } = store.getState()
+  const { matchPaths } = depGraph
+  return await fs.writeFile(
+    joinPath(program.directory, `.cache/matchPaths.json`),
+    JSON.stringify(matchPaths, null, 2)
+  )
+}
+
+exports.writeMatchPaths = writeMatchPaths
 
 let bootstrapFinished = false
 const debouncedWritePages = _.debounce(

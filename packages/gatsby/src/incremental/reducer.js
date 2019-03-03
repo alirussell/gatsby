@@ -60,7 +60,11 @@ module.exports = ({ flags }) => {
       case `CREATE_PAGE`: {
         const page = action.payload
         if (page.matchPath) {
+          if (action.oldPage && action.oldPage.matchPage !== page.matchPath) {
+            delete state.matchPaths[action.oldPage.matchPath]
+          }
           state.matchPaths[page.matchPath] = page.path
+          flags.matchPaths()
         }
         console.log(`page changed. flagging queryJob`, page.path)
         flags.queryJob(page.path)
@@ -70,6 +74,7 @@ module.exports = ({ flags }) => {
         const page = action.payload
         if (page.matchPath) {
           delete state.matchPaths[page.matchPath]
+          flags.matchPaths()
         }
         break
       }
