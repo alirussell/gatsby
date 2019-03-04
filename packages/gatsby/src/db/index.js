@@ -52,12 +52,14 @@ function startAutosave() {
     // emitter.on(`BOOTSTRAP_FINISHED`, () => {
     //   saveState()
     // })
-    emitter.on(`BUILD_FINISHED`, () => {
-      saveState()
-    })
+    // explicitly called now from build.js
+    // emitter.on(`BUILD_FINISHED`, () => {
+    //   saveState()
+    // })
   }
 }
 
 module.exports = {
   startAutosave,
+  saveState,
 }

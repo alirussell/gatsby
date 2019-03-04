@@ -21,6 +21,8 @@ const buildSchema = async ({
   types,
   thirdPartySchemas,
   typeMapping,
+  exampleValueStore,
+  dirtyNodeCollections,
   typeConflictReporter,
   parentSpan,
 }) => {
@@ -30,6 +32,8 @@ const buildSchema = async ({
     types,
     thirdPartySchemas,
     typeMapping,
+    exampleValueStore,
+    dirtyNodeCollections,
     typeConflictReporter,
     parentSpan,
   })
@@ -43,6 +47,8 @@ const rebuildSchemaWithSitePage = async ({
   schemaComposer,
   nodeStore,
   typeMapping,
+  exampleValueStore,
+  dirtyNodeCollections,
   typeConflictReporter,
   parentSpan,
 }) => {
@@ -51,6 +57,8 @@ const rebuildSchemaWithSitePage = async ({
     typeComposer: schemaComposer.getTC(`SitePage`),
     nodeStore,
     typeConflictReporter,
+    exampleValueStore,
+    dirtyNodeCollections,
     typeMapping,
     parentSpan,
   })
@@ -74,6 +82,8 @@ const updateSchemaComposer = async ({
   types,
   typeMapping,
   thirdPartySchemas,
+  exampleValueStore,
+  dirtyNodeCollections,
   typeConflictReporter,
   parentSpan,
 }) => {
@@ -82,6 +92,8 @@ const updateSchemaComposer = async ({
     schemaComposer,
     nodeStore,
     typeConflictReporter,
+    exampleValueStore,
+    dirtyNodeCollections,
     typeMapping,
     parentSpan,
   })

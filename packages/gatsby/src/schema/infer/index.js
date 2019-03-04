@@ -1,3 +1,4 @@
+const _ = require(`lodash`)
 const report = require(`gatsby-cli/lib/reporter`)
 const { getExampleValue } = require(`./example-value`)
 const {
@@ -12,19 +13,33 @@ const addInferredType = ({
   typeComposer,
   nodeStore,
   typeConflictReporter,
+  dirtyNodeCollections,
+  exampleValueStore,
   typeMapping,
   parentSpan,
 }) => {
   const typeName = typeComposer.getTypeName()
-  const exampleValue = getExampleValue({
-    nodes: nodeStore.getNodesByType(typeName),
-    typeName,
-    typeConflictReporter,
-    ignoreFields: [
-      ...getNodeInterface({ schemaComposer }).getFieldNames(),
-      `$loki`,
-    ],
-  })
+
+  let exampleValue
+  const oldExampleValue = exampleValueStore.get(typeName)
+  if (!oldExampleValue || dirtyNodeCollections[typeName]) {
+    console.log(`${typeName} collection dirty. Creating example value`)
+    exampleValue = getExampleValue({
+      nodes: nodeStore.getNodesByType(typeName),
+      typeName,
+      typeConflictReporter,
+      ignoreFields: [
+        ...getNodeInterface({ schemaComposer }).getFieldNames(),
+        `$loki`,
+      ],
+    })
+    if (!_.isEqual(exampleValue, exampleValueStore.get(typeName))) {
+      console.log(`${typeName} exampleValue has changed`)
+      exampleValueStore.save(typeName, exampleValue)
+    }
+  } else {
+    exampleValue = oldExampleValue
+  }
 
   addInferredFields({
     schemaComposer,
@@ -42,6 +57,8 @@ const addInferredTypes = ({
   schemaComposer,
   nodeStore,
   typeConflictReporter,
+  exampleValueStore,
+  dirtyNodeCollections,
   typeMapping,
   parentSpan,
 }) => {
@@ -74,6 +91,8 @@ const addInferredTypes = ({
       nodeStore,
       typeConflictReporter,
       typeComposer: schemaComposer.getTC(typeName),
+      exampleValueStore,
+      dirtyNodeCollections,
       typeMapping,
       parentSpan,
     })

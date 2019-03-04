@@ -12,6 +12,7 @@ const tracer = require(`opentracing`).globalTracer()
 const incrementalBuild = require(`../incremental`)
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const { emitter } = require(`../redux`)
+const db = require(`../db`)
 
 function reportFailure(msg, err: Error) {
   report.log(``)
@@ -99,6 +100,7 @@ module.exports = async function build(program: BuildArgs) {
 
   report.info(`Done building in ${process.uptime()} sec`)
   emitter.emit(`BUILD_FINISHED`)
+  await db.saveState()
 
   buildSpan.finish()
 

@@ -1,7 +1,7 @@
 /* @flow */
 
 const tracer = require(`opentracing`).globalTracer()
-const { store } = require(`../redux`)
+const { store, flags } = require(`../redux`)
 const nodeStore = require(`../db/nodes`)
 const { createSchemaComposer } = require(`./schema-composer`)
 const { buildSchema, rebuildSchemaWithSitePage } = require(`./schema`)
@@ -18,6 +18,21 @@ module.exports.build = async ({ parentSpan }) => {
 
   const typeConflictReporter = new TypeConflictReporter()
 
+  const exampleValueStore = {
+    get: typeName => store.getState().depGraph.exampleValues[typeName],
+    save: (typeName, exampleValue) => {
+      store.dispatch({
+        type: `SET_EXAMPLE_VALUE`,
+        payload: {
+          typeName,
+          exampleValue,
+        },
+      })
+      flags.schemaDirty()
+    },
+  }
+  const dirtyNodeCollections = flags.nodeTypeCollections
+
   const schemaComposer = createSchemaComposer()
   const schema = await buildSchema({
     schemaComposer,
@@ -25,6 +40,8 @@ module.exports.build = async ({ parentSpan }) => {
     types,
     thirdPartySchemas,
     typeMapping,
+    exampleValueStore,
+    dirtyNodeCollections,
     typeConflictReporter,
     parentSpan,
   })
@@ -44,6 +61,7 @@ module.exports.build = async ({ parentSpan }) => {
 }
 
 module.exports.rebuildWithSitePage = async ({ parentSpan }) => {
+  console.log(`with site page`)
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
   const span = tracer.startSpan(
     `rebuild schema with SitePage context`,
@@ -56,10 +74,27 @@ module.exports.rebuildWithSitePage = async ({ parentSpan }) => {
 
   const typeConflictReporter = new TypeConflictReporter()
 
+  const exampleValueStore = {
+    get: typeName => store.getState().depGraph.exampleValues[typeName],
+    save: (typeName, exampleValue) => {
+      store.dispatch({
+        type: `SET_EXAMPLE_VALUE`,
+        payload: {
+          typeName,
+          exampleValue,
+        },
+      })
+      flags.schemaDirty()
+    },
+  }
+  const dirtyNodeCollections = flags.nodeTypeCollections
+
   const schema = await rebuildSchemaWithSitePage({
     schemaComposer,
     nodeStore,
     typeMapping,
+    exampleValueStore,
+    dirtyNodeCollections,
     typeConflictReporter,
     parentSpan,
   })

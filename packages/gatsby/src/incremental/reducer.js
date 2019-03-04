@@ -44,9 +44,9 @@ module.exports = ({ flags }) => {
         flagDirtyNodes(state, action.payload)
         break
       }
-      case `SET_DEP_EXAMPLE_VALUE_HASH`: {
-        const { type, hash } = action.payload
-        _.set(state, [`exampleValues`, type], hash)
+      case `SET_EXAMPLE_VALUE`: {
+        const { typeName, exampleValue } = action.payload
+        _.set(state, [`exampleValues`, typeName], exampleValue)
         break
       }
       case `SET_QUERY_RESULT_HASH`: {

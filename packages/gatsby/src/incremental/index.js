@@ -6,9 +6,6 @@ const loadPlugins = require(`../bootstrap/load-plugins`)
 const apiRunner = require(`../utils/api-runner-node`)
 const { store, emitter, flags } = require(`../redux`)
 const nodeTracking = require(`../db/node-tracking`)
-const { getExampleValues } = require(`../schema/data-tree-utils`)
-const nodesDb = require(`../db/nodes`)
-const createContentDigest = require(`../utils/create-content-digest`)
 const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
@@ -42,25 +39,6 @@ async function sourceNodes() {
     traceId: `initial-sourceNodes`,
     waitForCascadingActions: true,
   })
-}
-
-function hasExampleValueChanged(type) {
-  const nodes = nodesDb.getNodesByType(type)
-  const exampleValue = getExampleValues({
-    nodes,
-    typeName: type,
-  })
-  const newHash = createContentDigest(exampleValue)
-  const oldHash = store.getState().depGraph.exampleValues[type]
-  return oldHash != newHash
-}
-
-function shouldRunSchema() {
-  const flaggedTypes = Object.keys(flags.nodeTypeCollections)
-  console.log(`flagged types`, flaggedTypes)
-  const changedTypes = flaggedTypes.filter(hasExampleValueChanged)
-  console.log(`changed types`, changedTypes)
-  return changedTypes.length > 0
 }
 
 async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
@@ -263,10 +241,6 @@ async function build({ parentSpan }) {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  if (shouldRunSchema()) {
-    flags.schemaDirty()
-    console.log(`schema is dirty`)
-  }
   await require(`../schema`).build({ parentSpan: activity.span })
   activity.end()
 
