@@ -39,7 +39,11 @@ function startAutosave() {
 
   // During builds, persist state once bootstrap has finished.
   if (process.env.gatsby_executing_command === `build`) {
-    emitter.on(`BOOTSTRAP_FINISHED`, () => {
+    // TODO Figure out best time to save
+    // emitter.on(`BOOTSTRAP_FINISHED`, () => {
+    //   saveState()
+    // })
+    emitter.on(`BUILD_FINISHED`, () => {
       saveState()
     })
   }

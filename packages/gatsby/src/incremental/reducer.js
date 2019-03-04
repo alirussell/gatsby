@@ -6,6 +6,7 @@ const initialState = {
   pageDependsOnNode: {},
   queryDependsOnNode: {},
   queryResults: {},
+  compilationHash: null,
 }
 // TODO Remember to handle create child, create node field
 // A child node will only be created by a transform plugin. And that will only happen if the source plugin has to recreate it. So createNodeField will never occur in a source plugin? No, a site plugin might a field to a parent node in onCreateNode
@@ -55,6 +56,12 @@ module.exports = ({ flags }) => {
         if (isStatic) {
           flags.staticQuery()
         }
+        break
+      }
+      case `SET_WEBPACK_JS_COMPILATION_HASH`: {
+        console.log(`got message`, action)
+        _.set(state, [`compilationHash`], action.payload)
+        console.log(state)
         break
       }
       case `CREATE_PAGE`: {

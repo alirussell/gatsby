@@ -10,6 +10,7 @@ const { initTracer, stopTracer } = require(`../utils/tracer`)
 const chalk = require(`chalk`)
 const tracer = require(`opentracing`).globalTracer()
 const incrementalBuild = require(`../incremental`)
+const { emitter } = require(`../redux`)
 
 function reportFailure(msg, err: Error) {
   report.log(``)
@@ -89,6 +90,7 @@ module.exports = async function build(program: BuildArgs) {
   }
 
   report.info(`Done building in ${process.uptime()} sec`)
+  emitter.emit(`BUILD_FINISHED`)
 
   buildSpan.finish()
 
