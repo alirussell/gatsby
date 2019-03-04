@@ -12,13 +12,21 @@ let lastHash = null
 // Write out pages information.
 const writePages = async () => {
   bootstrapFinished = true
-  let { program, jsonDataPaths, pages } = store.getState()
+
+  if (!flags.matchPathsChanged && process.env.NODE_ENV === `production`) {
+    return Promise.resolve()
+  }
+
+  debug(`match paths changed. Writing matchPaths.json`)
+  let { program, pages, depGraph } = store.getState()
+  const { matchPaths } = depGraph
+
   pages = [...pages.values()]
 
   const pagesComponentDependencies = {}
 
   // Write out pages.json
-  let pagesData = []
+  // let pagesData = []
   pages.forEach(({ path, matchPath, componentChunkName, jsonName }) => {
     const pageComponentsChunkNames = {
       componentChunkName,
@@ -28,27 +36,27 @@ const writePages = async () => {
       pagesComponentDependencies[path] = pageComponentsChunkNames
     }
 
-    pagesData.push({
-      ...pageComponentsChunkNames,
-      jsonName,
-      path,
-      matchPath,
-    })
+    // pagesData.push({
+    //   ...pageComponentsChunkNames,
+    //   jsonName,
+    //   path,
+    //   matchPath,
+    // })
   })
 
-  pagesData = _(pagesData)
-    // Ensure pages keep the same sorting through builds.
-    // Pages without matchPath come first, then pages with matchPath,
-    // where more specific patterns come before less specific patterns.
-    // This ensures explicit routes will match before general.
-    // Specificity is inferred from number of path segments.
-    .sortBy(
-      p =>
-        `${p.matchPath ? 9999 - p.matchPath.split(`/`).length : `0000`}${
-          p.path
-        }`
-    )
-    .value()
+  // pagesData = _(pagesData)
+  //   // Ensure pages keep the same sorting through builds.
+  //   // Pages without matchPath come first, then pages with matchPath,
+  //   // where more specific patterns come before less specific patterns.
+  //   // This ensures explicit routes will match before general.
+  //   // Specificity is inferred from number of path segments.
+  //   .sortBy(
+  //     p =>
+  //       `${p.matchPath ? 9999 - p.matchPath.split(`/`).length : `0000`}${
+  //         p.path
+  //       }`
+  //   )
+  //   .value()
   const newHash = crypto
     .createHash(`md5`)
     .update(JSON.stringify(pagesComponentDependencies))
@@ -102,10 +110,10 @@ const preferDefault = m => m && m.default || m
     .join(`,\n`)}
 }\n\n`
 
-  asyncRequires += `exports.data = () => import(/* webpackChunkName: "pages-manifest" */ "${joinPath(
+  asyncRequires += `exports.matchPaths = () => import(/* webpackChunkName: "match-paths" */ "${joinPath(
     program.directory,
     `.cache`,
-    `data.json`
+    `match-paths.json`
   )}")\n\n`
 
   const writeAndMove = (file, data) => {
@@ -117,22 +125,23 @@ const preferDefault = m => m && m.default || m
   }
 
   const result = await Promise.all([
-    writeAndMove(`pages.json`, JSON.stringify(pagesData, null, 4)),
+    // writeAndMove(`pages.json`, JSON.stringify(pagesData, null, 4)),
     writeAndMove(`sync-requires.js`, syncRequires),
     writeAndMove(`async-requires.js`, asyncRequires),
-    writeAndMove(
-      `data.json`,
-      JSON.stringify({
-        pages: pagesData,
-        // Sort dataPaths by keys to ensure keeping the same
-        // sorting through builds
-        dataPaths: _(jsonDataPaths)
-          .toPairs()
-          .sortBy(0)
-          .fromPairs()
-          .value(),
-      })
-    ),
+    writeAndMove(`match-paths.json`, JSON.stringify(matchPaths)),
+    // writeAndMove(
+    //   `data.json`,
+    //   JSON.stringify({
+    //     pages: pagesData,
+    //     // Sort dataPaths by keys to ensure keeping the same
+    //     // sorting through builds
+    //     dataPaths: _(jsonDataPaths)
+    //       .toPairs()
+    //       .sortBy(0)
+    //       .fromPairs()
+    //       .value(),
+    //   })
+    // ),
   ])
 
   return result
@@ -145,21 +154,6 @@ const resetLastHash = () => {
 }
 
 exports.resetLastHash = resetLastHash
-
-async function writeMatchPaths() {
-  if (!flags.matchPathsChanged) {
-    return Promise.resolve()
-  }
-  debug(`match paths changed. Writing matchPaths.json`)
-  let { program, depGraph } = store.getState()
-  const { matchPaths } = depGraph
-  return await fs.writeFile(
-    joinPath(program.directory, `.cache/matchPaths.json`),
-    JSON.stringify(matchPaths, null, 2)
-  )
-}
-
-exports.writeMatchPaths = writeMatchPaths
 
 function writePageManifest({ compilationDir, page, dataPath }) {
   const basename = `page-manifest-${page.jsonName}.json`

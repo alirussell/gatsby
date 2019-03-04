@@ -13,7 +13,7 @@ const Promise = require(`bluebird`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
 const getBrowserslist = require(`../utils/browserslist`)
 const { graphql } = require(`graphql`)
-const { store, emitter } = require(`../redux`)
+const { store, emitter, flags } = require(`../redux`)
 const loadPlugins = require(`./load-plugins`)
 const loadThemes = require(`./load-themes`)
 const report = require(`gatsby-cli/lib/reporter`)
@@ -87,6 +87,8 @@ async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
 module.exports = async (args: BootstrapArgs) => {
   const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
   const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
+
+  flags.matchPaths()
 
   // Start plugin runner which listens to the store
   // and invokes Gatsby API based on actions.
@@ -492,14 +494,6 @@ module.exports = async (args: BootstrapArgs) => {
   })
   activity.start()
   await writeRedirects()
-  activity.end()
-
-  // Write out matchPaths.json
-  activity = report.activityTimer(`write out match paths`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await pagesWriter.writeMatchPaths()
   activity.end()
 
   let onEndJob

@@ -256,11 +256,11 @@ async function build({ parentSpan }) {
   await writeRedirects({ activity, bootstrapSpan })
 
   // Write out matchPaths.json
-  activity = report.activityTimer(`write out match paths`, {
+  activity = report.activityTimer(`write out pages`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await pagesWriter.writeMatchPaths()
+  await pagesWriter.writePages()
   activity.end()
 
   // Wait for jobs to finish
