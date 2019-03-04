@@ -4,7 +4,7 @@ const tracer = require(`opentracing`).globalTracer()
 const report = require(`gatsby-cli/lib/reporter`)
 const loadPlugins = require(`../bootstrap/load-plugins`)
 const apiRunner = require(`../utils/api-runner-node`)
-const { store, flags } = require(`../redux`)
+const { store, emitter, flags } = require(`../redux`)
 const nodeTracking = require(`../db/node-tracking`)
 const { getExampleValues } = require(`../schema/data-tree-utils`)
 const nodesDb = require(`../db/nodes`)
@@ -171,6 +171,21 @@ async function writeRedirects({ activity, bootstrapSpan }) {
   activity.end()
 }
 
+const checkJobsDone = _.debounce(resolve => {
+  if (store.getTtate.jobs.active.length === 0) {
+    resolve()
+  }
+}, 100)
+
+function waitJobsFinished() {
+  return new Promise((resolve, reject) => {
+    if (store.getState().jobs.active.length === 0) {
+      resolve()
+    }
+    emitter.on(`END_JOB`, () => checkJobsDone(resolve))
+  })
+}
+
 async function build({ parentSpan }) {
   console.log(`INCREMENTAL`)
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
@@ -249,6 +264,27 @@ async function build({ parentSpan }) {
   activity.start()
   await pagesWriter.writeMatchPaths()
   activity.end()
+
+  // Wait for jobs to finish
+  await waitJobsFinished()
+
+  // onPostBootstrap
+  activity = report.activityTimer(`onPostBootstrap`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunner(`onPostBootstrap`, { parentSpan: activity.span })
+  activity.end()
+
+  bootstrapSpan.finish()
+
+  report.log(``)
+  report.info(`bootstrap finished - ${process.uptime()} s`)
+  report.log(``)
+  emitter.emit(`BOOTSTRAP_FINISHED`)
+  return {
+    graphqlRunner,
+  }
 }
 
 module.exports = build
