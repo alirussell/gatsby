@@ -22,6 +22,7 @@ const tracer = require(`opentracing`).globalTracer()
 const preferDefault = require(`./prefer-default`)
 const nodeTracking = require(`../db/node-tracking`)
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
+const withResolverContext = require(`../schema/context`)
 require(`../db`).startAutosave()
 
 // Show stack trace on unhandled promises.
@@ -417,7 +418,13 @@ module.exports = async (args: BootstrapArgs) => {
 
   const graphqlRunner = (query, context = {}) => {
     const schema = store.getState().schema
-    return graphql(schema, query, context, context, context)
+    return graphql(
+      schema,
+      query,
+      context,
+      withResolverContext(context, schema),
+      context
+    )
   }
 
   await createPages({ activity, bootstrapSpan, graphqlRunner })
@@ -434,10 +441,8 @@ module.exports = async (args: BootstrapArgs) => {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await require(`../schema`).build({ parentSpan: activity.span })
+  await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
   activity.end()
-
-  require(`../schema/type-conflict-reporter`).printConflicts()
 
   // Extract queries
   activity = report.activityTimer(`extract queries from components`, {
@@ -497,9 +502,13 @@ module.exports = async (args: BootstrapArgs) => {
   await pagesWriter.writeMatchPaths()
   activity.end()
 
+  let onEndJob
+
   const checkJobsDone = _.debounce(resolve => {
     const state = store.getState()
     if (state.jobs.active.length === 0) {
+      emitter.off(`END_JOB`, onEndJob)
+
       report.log(``)
       report.info(`bootstrap finished - ${process.uptime()} s`)
       report.log(``)
@@ -540,7 +549,8 @@ module.exports = async (args: BootstrapArgs) => {
   } else {
     return new Promise(resolve => {
       // Wait until all side effect jobs are finished.
-      emitter.on(`END_JOB`, () => checkJobsDone(resolve))
+      onEndJob = () => checkJobsDone(resolve)
+      emitter.on(`END_JOB`, onEndJob)
     })
   }
 }

@@ -20,8 +20,8 @@ function getNodesReducer() {
   return nodesReducer
 }
 
-module.exports = ({ flags }) => {
-  return {
+module.exports = ({ flags }) => (
+  {
     program: require(`./program`),
     nodes: getNodesReducer(),
     nodesByType: require(`./nodes-by-type`),
@@ -33,7 +33,6 @@ module.exports = ({ flags }) => {
     apiToPlugins: require(`./api-to-plugins`),
     config: require(`./config`),
     pages: require(`./pages`),
-    pagesTouched: require(`./pages-touched`),
     schema: require(`./schema`),
     status: require(`./status`),
     componentDataDependencies: require(`./component-data-dependencies`),
@@ -44,10 +43,10 @@ module.exports = ({ flags }) => {
     redirects: require(`./redirects`)({ flags }),
     babelrc: require(`./babelrc`),
     jsonDataPaths: require(`./json-data-paths`),
-    thirdPartySchemas: require(`./third-party-schemas`),
+    schemaCustomization: require(`./schema-customization`),
     themes: require(`./themes`),
 
     // Incremental builds
     depGraph: require(`../../incremental/reducer`)({ flags }),
   }
-}
+)

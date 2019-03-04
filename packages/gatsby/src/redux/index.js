@@ -1,6 +1,6 @@
 const Redux = require(`redux`)
 const _ = require(`lodash`)
-const fs = require(`fs`)
+const fs = require(`fs-extra`)
 const mitt = require(`mitt`)
 const stringify = require(`json-stringify-safe`)
 const Flags = require(`../incremental/flags`)
@@ -101,11 +101,7 @@ function saveState() {
   pickedState.nodes = pickedState.nodes ? mapToObject(pickedState.nodes) : []
   pickedState.pages = pickedState.pages ? mapToObject(pickedState.pages) : []
   const stringified = stringify(pickedState, null, 2)
-  fs.writeFile(
-    `${process.cwd()}/.cache/redux-state.json`,
-    stringified,
-    () => {}
-  )
+  return fs.writeFile(`${process.cwd()}/.cache/redux-state.json`, stringified)
 }
 
 exports.saveState = saveState

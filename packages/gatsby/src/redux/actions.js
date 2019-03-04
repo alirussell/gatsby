@@ -7,9 +7,11 @@ const { stripIndent } = require(`common-tags`)
 const report = require(`gatsby-cli/lib/reporter`)
 const path = require(`path`)
 const fs = require(`fs`)
+const truePath = require(`true-case-path`)
 const url = require(`url`)
 const kebabHash = require(`kebab-hash`)
 const { hasNodeChanged, getNode, getNodeDependsOnPage } = require(`../db/nodes`)
+const slash = require(`slash`)
 const { trackInlineObjectsInRootNode } = require(`../db/node-tracking`)
 const { store } = require(`./index`)
 const fileExistsSync = require(`fs-exists-cached`).sync
@@ -89,7 +91,8 @@ const pascalCase = _.flow(
   _.camelCase,
   _.upperFirst
 )
-const hasWarnedForPageComponent = new Set()
+const hasWarnedForPageComponentInvalidContext = new Set()
+const hasWarnedForPageComponentInvalidCasing = new Set()
 const fileOkCache = {}
 
 /**
@@ -184,9 +187,9 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
       } else if (invalidFields.some(f => page.context[f] !== page[f])) {
         report.panic(error)
       } else {
-        if (!hasWarnedForPageComponent.has(page.component)) {
+        if (!hasWarnedForPageComponentInvalidContext.has(page.component)) {
           report.warn(error)
-          hasWarnedForPageComponent.add(page.component)
+          hasWarnedForPageComponentInvalidContext.add(page.component)
         }
       }
     }
@@ -202,6 +205,39 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
       console.log(``)
       console.log(page)
       noPageOrComponent = true
+    } else if (page.component) {
+      // normalize component path
+      page.component = slash(page.component)
+      // check if path uses correct casing - incorrect casing will
+      // cause issues in query compiler and inconsistencies when
+      // developing on Mac or Windows and trying to deploy from
+      // linux CI/CD pipeline
+      const trueComponentPath = slash(truePath(page.component))
+      if (trueComponentPath !== page.component) {
+        if (!hasWarnedForPageComponentInvalidCasing.has(page.component)) {
+          const markers = page.component
+            .split(``)
+            .map((letter, index) => {
+              if (letter !== trueComponentPath[index]) {
+                return `^`
+              }
+              return ` `
+            })
+            .join(``)
+
+          report.warn(
+            stripIndent`
+          ${name} created a page with a component path that doesn't match the casing of the actual file. This may work locally, but will break on systems which are case-sensitive, e.g. most CI/CD pipelines.
+
+          page.component:     "${page.component}"
+          path in filesystem: "${trueComponentPath}"
+                               ${markers}
+        `
+          )
+          hasWarnedForPageComponentInvalidCasing.add(page.component)
+        }
+        page.component = trueComponentPath
+      }
     }
   }
 
@@ -336,44 +372,44 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
  * @example
  * deleteNode({node: node})
  */
-actions.deleteNode = (options: any, plugin: Plugin, ...args) => {
+actions.deleteNode = (options: any, plugin: Plugin, args: any) => {
   let node = _.get(options, `node`)
 
   // Check if using old method signature. Warn about incorrect usage but get
   // node from nodeID anyway.
   if (typeof options === `string`) {
-    console.warn(
-      `Calling "deleteNode" with a nodeId is deprecated. Please pass an object containing a full node instead: deleteNode({ node })`
-    )
-
-    if (args[0] && args[0].name) {
+    let msg =
+      `Calling "deleteNode" with a nodeId is deprecated. Please pass an ` +
+      `object containing a full node instead: deleteNode({ node }).`
+    if (args && args.name) {
       // `plugin` used to be the third argument
-      console.log(`"deleteNode" was called by ${args[0].name}`)
+      plugin = args
+      msg = msg + ` "deleteNode" was called by ${plugin.name}`
     }
+    report.warn(msg)
 
     node = getNode(options)
   }
 
-  let deleteDescendantsActions
-  // It's possible the file node was never created as sometimes tools will
-  // write and then immediately delete temporary files to the file system.
-  if (node) {
-    // Also delete any nodes transformed from this one.
-    const descendantNodes = findChildrenRecursively(node.children)
-    if (descendantNodes.length > 0) {
-      deleteDescendantsActions = descendantNodes.map(n =>
-        actions.deleteNode({ node: getNode(n) }, plugin)
-      )
+  const createDeleteAction = node => {
+    return {
+      type: `DELETE_NODE`,
+      plugin,
+      payload: node,
     }
   }
 
-  const deleteAction = {
-    type: `DELETE_NODE`,
-    plugin,
-    payload: node,
-  }
+  const deleteAction = createDeleteAction(node)
 
-  if (deleteDescendantsActions) {
+  // It's possible the file node was never created as sometimes tools will
+  // write and then immediately delete temporary files to the file system.
+  const deleteDescendantsActions =
+    node &&
+    findChildrenRecursively(node.children)
+      .map(getNode)
+      .map(createDeleteAction)
+
+  if (deleteDescendantsActions && deleteDescendantsActions.length) {
     return [...deleteDescendantsActions, deleteAction]
   } else {
     return deleteAction
@@ -387,35 +423,25 @@ actions.deleteNode = (options: any, plugin: Plugin, ...args) => {
  * deleteNodes([`node1`, `node2`])
  */
 actions.deleteNodes = (nodes: any[], plugin: Plugin) => {
-  console.log(
-    `The "deleteNodes" action is now deprecated and will be removed in Gatsby v3. Please use "deleteNode" instead.`
-  )
+  let msg =
+    `The "deleteNodes" action is now deprecated and will be removed in ` +
+    `Gatsby v3. Please use "deleteNode" instead.`
   if (plugin && plugin.name) {
-    console.log(`"deleteNodes" was called by ${plugin.name}`)
+    msg = msg + ` "deleteNodes" was called by ${plugin.name}`
   }
+  report.warn(msg)
 
   // Also delete any nodes transformed from these.
   const descendantNodes = _.flatten(
     nodes.map(n => findChildrenRecursively(getNode(n).children))
   )
-  let deleteDescendantsActions
-  if (descendantNodes.length > 0) {
-    deleteDescendantsActions = descendantNodes.map(n =>
-      actions.deleteNode({ node: getNode(n) }, plugin)
-    )
-  }
 
   const deleteNodesAction = {
     type: `DELETE_NODES`,
     plugin,
-    payload: nodes,
+    payload: [...nodes, ...descendantNodes],
   }
-
-  if (deleteDescendantsActions) {
-    return [...deleteDescendantsActions, deleteNodesAction]
-  } else {
-    return deleteNodesAction
-  }
+  return deleteNodesAction
 }
 
 const typeOwners = {}
@@ -604,6 +630,7 @@ actions.createNode = (
   }
 
   const reduxActions = []
+
   // Check if the node has already been processed.
   if (oldNode && !hasNodeChanged(node.id, node.internal.contentDigest)) {
     reduxActions.push({
@@ -616,10 +643,17 @@ actions.createNode = (
     // Remove any previously created descendant nodes as they're all due
     // to be recreated.
     if (oldNode) {
-      const descendantNodes = findChildrenRecursively(oldNode.children)
-      descendantNodes.forEach(n => {
-        reduxActions.push(actions.deleteNode({ node: getNode(n) }))
-      })
+      const createDeleteAction = node => {
+        return {
+          type: `DELETE_NODE`,
+          plugin,
+          ...actionOptions,
+          payload: node,
+        }
+      }
+      for (const child in findChildrenRecursively(oldNode.children)) {
+        reduxActions.push(createDeleteAction(getNode(child)))
+      }
     }
 
     reduxActions.push({
@@ -1154,6 +1188,76 @@ actions.addThirdPartySchema = (
     plugin,
     traceId,
     payload: schema,
+  }
+}
+
+/**
+ * Add type definitions to the GraphQL schema.
+ *
+ * @param {TypeDefinitions} types Type definitions, where `type TypeDefinitions = string | GraphQLOutputType | string[] | GraphQLOutputType[]`
+ *
+ * Type definitions can be provided either as
+ * [`graphql-js` types](https://graphql.org/graphql-js/), or in
+ * [GraphQL schema definition language (SDL)](https://graphql.org/learn/).
+ *
+ * Things to note:
+ * * needs to be called *before* schema generation. It is recommended to use
+ *   `createTypes` in the `sourceNodes` API.
+ * * type definitions targeting node types, i.e. `MarkdownRemark` and others
+ *   added in `sourceNodes` or `onCreateNode` APIs, need to implement the
+ *   `Node` interface. Interface fields will be added automatically, but it
+ *   is mandatory to label those types with `implements Node`.
+ * * by default, explicit type definitions from `createTypes` will be merged
+ *   with inferred field types, and default field resolvers for `Date` (which
+ *   adds formatting options) and `File` (which resolves the field value as
+ *   a `relativePath` foreign-key field) are added. This behavior can be
+ *   customised with `@infer` and `dontInfer` directives, and their
+ *   `noDefaultResolvers` argument.
+ *
+ * @example
+ * exports.sourceNodes = ({ actions }) => {
+ *   const { createTypes } = actions
+ *   const typeDefs = `
+ *     """
+ *     Markdown Node
+ *     """
+ *     type MarkdownRemark implements Node {
+ *       frontmatter: Frontmatter!
+ *     }
+ *
+ *     """
+ *     Markdown Frontmatter
+ *     """
+ *     type Frontmatter {
+ *       title: String!
+ *       author: AuthorJson!
+ *       date: Date!
+ *       published: Boolean!
+ *       tags: [String!]!
+ *     }
+ *
+ *     """
+ *     Author information
+ *     """
+ *     # Does not include automatically inferred fields
+ *     type AuthorJson implements Node @dontInfer(noFieldResolvers: true) {
+ *       name: String!
+ *       birthday: Date! # no default resolvers for Date formatting added
+ *     }
+ *   `
+ *   createTypes(typeDefs)
+ * }
+ */
+actions.createTypes = (
+  types: string | GraphQLOutputType | Array<string | GraphQLOutputType>,
+  plugin: Plugin,
+  traceId?: string
+) => {
+  return {
+    type: `CREATE_TYPES`,
+    plugin,
+    traceId,
+    payload: types,
   }
 }
 
