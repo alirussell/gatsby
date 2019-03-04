@@ -13,6 +13,7 @@ const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
+const buildProductionBundle = require(`../commands/build-javascript`)
 const {
   runQueriesForPathnames,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
@@ -186,6 +187,28 @@ function waitJobsFinished() {
   })
 }
 
+const shouldbuildProductionApp = () =>
+  flags.matchPathsChanged || flags.staticQueryChanged || flags.redirectsChanged
+
+function reportFailure(msg, err) {
+  report.log(``)
+  report.panic(msg, err)
+}
+
+async function buildProductionApp({ parentSpan }) {
+  const program = store.getState().program
+  let activity
+  activity = report.activityTimer(
+    `Building production JavaScript and CSS bundles`,
+    { parentSpan }
+  )
+  activity.start()
+  await buildProductionBundle(program).catch(err => {
+    reportFailure(`Generating JavaScript bundles failed`, err)
+  })
+  activity.end()
+}
+
 async function build({ parentSpan }) {
   console.log(`INCREMENTAL`)
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
@@ -282,8 +305,16 @@ async function build({ parentSpan }) {
   report.info(`bootstrap finished - ${process.uptime()} s`)
   report.log(``)
   emitter.emit(`BOOTSTRAP_FINISHED`)
-  return {
-    graphqlRunner,
+
+  await apiRunner(`onPreBuild`, {
+    graphql: graphqlRunner,
+    parentSpan: bootstrapSpan,
+  })
+
+  // TODO build.copyStaticDir()?
+
+  if (shouldbuildProductionApp()) {
+    await buildProductionApp({ parentSpan: bootstrapSpan })
   }
 }
 
