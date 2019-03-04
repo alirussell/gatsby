@@ -56,11 +56,16 @@ module.exports = ({ flags }) => {
         if (isStatic) {
           flags.staticQuery()
         }
+
+        if (!isStatic) {
+          flags.pageManifest(id) // path since it's a page
+        }
         break
       }
       case `SET_WEBPACK_JS_COMPILATION_HASH`: {
         console.log(`got message`, action)
         _.set(state, [`compilationHash`], action.payload)
+        flags.renderPage()
         console.log(state)
         break
       }

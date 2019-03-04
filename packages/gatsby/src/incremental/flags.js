@@ -9,6 +9,8 @@ class Flags {
     this.staticQueryChanged = false
     this.redirectsChanged = false
     this.matchPathsChanged = false
+    this.pageManifests = new Set()
+    this.renderPageDirty = false
   }
   nodeTypeCollection(type, id) {
     _.update(this.nodeTypeCollections, type, fooSet =>
@@ -32,6 +34,17 @@ class Flags {
   }
   matchPaths() {
     this.matchPathsChanged = true
+  }
+  pageManifest(path) {
+    this.pageManifests.add(path)
+  }
+  renderPage() {
+    this.renderPageDirty = true
+  }
+  isWebpackDirty() {
+    return (
+      this.matchPathsChanged || this.staticQueryChanged || this.redirectsChanged
+    )
   }
 }
 

@@ -182,8 +182,19 @@ async function writePageManifests() {
     compilationHash
   )
   await fs.ensureDir(compilationDir)
+  const dirtyPages = flags.isWebpackDirty()
+    ? Array.from(pages.values())
+    : [...flags.pageManifests].map(path => pages.get(path))
+
+  if (flags.isWebpackDirty()) {
+    debug(`all page manifests dirty. Writing all`)
+  } else {
+    for (const page of dirtyPages) {
+      debug(`writing page manifest`, page.jsonName)
+    }
+  }
   return await Promise.all(
-    Array.from(pages.values()).map(page => {
+    dirtyPages.map(page => {
       writePageManifest({
         compilationDir,
         page,

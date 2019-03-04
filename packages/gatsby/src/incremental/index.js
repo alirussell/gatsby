@@ -316,6 +316,13 @@ async function build({ parentSpan }) {
   if (shouldbuildProductionApp()) {
     await buildProductionApp({ parentSpan: bootstrapSpan })
   }
+
+  activity = report.activityTimer(`Write page manifests`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await pagesWriter.writePageManifests()
+  activity.end()
 }
 
 module.exports = build
