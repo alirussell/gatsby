@@ -14,6 +14,7 @@ const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const buildProductionBundle = require(`../commands/build-javascript`)
+const buildHtml = require(`../commands/build-html`)
 const {
   runQueriesForPathnames,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
@@ -322,6 +323,22 @@ async function build({ parentSpan }) {
   })
   activity.start()
   await pagesWriter.writePageManifests()
+  activity.end()
+
+  if (flags.renderPageDirty) {
+    activity = report.activityTimer(`build render-page.js`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    await buildHtml.buildRenderPage()
+    activity.end()
+  }
+
+  activity = report.activityTimer(`write out page html`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await buildHtml.buildDirtyPages(activity)
   activity.end()
 }
 

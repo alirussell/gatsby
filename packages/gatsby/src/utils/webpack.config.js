@@ -345,7 +345,7 @@ module.exports = async (
         root.push(userLoaderDirectoryPath)
       }
     } catch (err) {
-      debug(`Error resolving user loaders directory`, err)
+      // nada
     }
 
     return {

@@ -63,10 +63,8 @@ module.exports = ({ flags }) => {
         break
       }
       case `SET_WEBPACK_JS_COMPILATION_HASH`: {
-        console.log(`got message`, action)
         _.set(state, [`compilationHash`], action.payload)
         flags.renderPage()
-        console.log(state)
         break
       }
       case `CREATE_PAGE`: {

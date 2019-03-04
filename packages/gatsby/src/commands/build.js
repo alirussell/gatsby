@@ -63,7 +63,7 @@ async function fullBuild({ program, buildSpan }) {
     parentSpan: buildSpan,
   })
   activity.start()
-  await buildHTML(program, activity).catch(err => {
+  await buildHTML.buildAll(program, activity).catch(err => {
     reportFailure(
       report.stripIndent`
         Building static HTML failed${
