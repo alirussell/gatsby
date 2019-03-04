@@ -161,6 +161,40 @@ async function writeMatchPaths() {
 
 exports.writeMatchPaths = writeMatchPaths
 
+function writePageManifest({ compilationDir, page, dataPath }) {
+  const basename = `page-manifest-${page.jsonName}.json`
+  const path = joinPath(compilationDir, basename)
+  const body = {
+    componentChunkName: page.componentChunkName,
+    dataPath,
+  }
+  return fs.writeFile(path, JSON.stringify(body))
+}
+
+async function writePageManifests() {
+  const state = store.getState()
+  const { program, pages, jsonDataPaths } = state
+  const compilationHash = state.depGraph.compilationHash
+  const compilationDir = joinPath(
+    program.directory,
+    `public`,
+    `builds`,
+    compilationHash
+  )
+  await fs.ensureDir(compilationDir)
+  return await Promise.all(
+    Array.from(pages.values()).map(page => {
+      writePageManifest({
+        compilationDir,
+        page,
+        dataPath: jsonDataPaths[page.jsonName],
+      })
+    })
+  )
+}
+
+exports.writePageManifests = writePageManifests
+
 let bootstrapFinished = false
 const debouncedWritePages = _.debounce(
   () => {

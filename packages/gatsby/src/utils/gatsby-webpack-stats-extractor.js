@@ -27,8 +27,12 @@ class GatsbyWebpackStatsExtractor {
             .map(filename => `/${filename}`)
         }
       }
-      const statsJson = stats.toJson({ all: false, chunkGroups: true, hash: true })
-      const result = store.dispatch({
+      const statsJson = stats.toJson({
+        all: false,
+        chunkGroups: true,
+        hash: true,
+      })
+      store.dispatch({
         type: `SET_WEBPACK_JS_COMPILATION_HASH`,
         payload: statsJson.hash,
       })

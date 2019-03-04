@@ -10,6 +10,7 @@ const { initTracer, stopTracer } = require(`../utils/tracer`)
 const chalk = require(`chalk`)
 const tracer = require(`opentracing`).globalTracer()
 const incrementalBuild = require(`../incremental`)
+const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const { emitter } = require(`../redux`)
 
 function reportFailure(msg, err: Error) {
@@ -49,6 +50,13 @@ async function fullBuild({ program, buildSpan }) {
   await buildProductionBundle(program).catch(err => {
     reportFailure(`Generating JavaScript bundles failed`, err)
   })
+  activity.end()
+
+  activity = report.activityTimer(`Write page manifests`, {
+    parentSpan: buildSpan,
+  })
+  activity.start()
+  await pagesWriter.writePageManifests()
   activity.end()
 
   activity = report.activityTimer(`Building static HTML for pages`, {
