@@ -41,7 +41,7 @@ async function buildDirtyPages(activity) {
   const { directory } = program
   const dirtyPages = flags.renderPageDirty
     ? [...pages.keys()]
-    : [...flags.pageManifests]
+    : [...flags.pageDatas]
 
   const outputFile = `${directory}/public/render-page.js`
   try {

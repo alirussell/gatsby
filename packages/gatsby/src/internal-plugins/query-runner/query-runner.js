@@ -1,16 +1,15 @@
 // @flow
 
 import { graphql as graphqlFunction } from "graphql"
+const invariant = require(`invariant`)
 const fs = require(`fs-extra`)
 const report = require(`gatsby-cli/lib/reporter`)
 const websocketManager = require(`../../utils/websocket-manager`)
 
 const path = require(`path`)
-const { store } = require(`../../redux`)
+const { store, flags } = require(`../../redux`)
 const withResolverContext = require(`../../schema/context`)
-const { generatePathChunkName } = require(`../../utils/js-chunk-names`)
 const { formatErrorDetails } = require(`./utils`)
-const mod = require(`hash-mod`)(999)
 const debug = require(`debug`)(`gatsby:query-runner`)
 
 type QueryJob = {
@@ -123,52 +122,51 @@ ${formatErrorDetails(errorDetails)}`)
     },
   })
 
-  // Remove potentially unsafe characters. This increases chances of
-  // collisions slightly but it should still be very safe + we get a
-  // shorter url vs hex.
-  const readableResultHash = resultHash.replace(/[^a-zA-Z0-9-_]/g, ``)
-
-  let dataPath
+  // TODO put all query results in queue and write concurrently so
+  // we're not waiting on disk i/o all the time
+  
   if (queryJob.isPage) {
-    dataPath = `${generatePathChunkName(
-      queryJob.jsonName
-    )}-${readableResultHash}`
+    const state = store.getState()
+    const pagePath = queryJob.id
+    const publicDir = path.join(program.directory, `public`)
+    const fixedPagePath = pagePath === `/` ? `index` : pagePath
+    const page = state.pages.get(pagePath)
+    invariant(page, `queryJob path [${pagePath}] not found`)
+    const pageDataPath = path.join(
+      publicDir,
+      `page-data`,
+      fixedPagePath,
+      `page-data.json`
+    )
+    const body = {
+      componentChunkName: page.componentChunkName,
+      path: queryJob.id,
+      ...result,
+    }
+    flags.pageData(pagePath)
+    await fs.outputFile(pageDataPath, JSON.stringify(body))
+
+    // It's a StaticQuery
   } else {
-    dataPath = queryJob.hash
+    // Always write file to public/static/d/ folder.
+    const resultPath = path.join(
+      program.directory,
+      `public`,
+      `static`,
+      `d`,
+      `${queryJob.hash}.json`
+    )
+
+    // This will eventually go away
+    store.dispatch({
+      type: `SET_JSON_DATA_PATH`,
+      payload: {
+        key: queryJob.jsonName,
+        value: queryJob.hash,
+      },
+    })
+
+    await fs.outputFile(resultPath, resultJSON)
   }
-
-  let modInt = ``
-  // We leave StaticQuery results at public/static/d
-  // as the babel plugin has that path hard-coded
-  // for importing static query results.
-  if (queryJob.isPage) {
-    modInt = mod(dataPath).toString()
-  }
-
-  // Always write file to public/static/d/ folder.
-  const resultPath = path.join(
-    program.directory,
-    `public`,
-    `static`,
-    `d`,
-    modInt,
-    `${dataPath}.json`
-  )
-
-  if (queryJob.isPage) {
-    dataPath = `${modInt}/${dataPath}`
-  }
-
-  await fs.outputFile(resultPath, resultJSON)
-
-  // This will eventually go away
-  store.dispatch({
-    type: `SET_JSON_DATA_PATH`,
-    payload: {
-      key: queryJob.jsonName,
-      value: dataPath,
-    },
-  })
-
   return result
 }

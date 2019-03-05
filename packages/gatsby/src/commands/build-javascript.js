@@ -1,6 +1,16 @@
 /* @flow */
 const webpack = require(`webpack`)
 const webpackConfig = require(`../utils/webpack.config`)
+const { store } = require(`../redux`)
+
+function writeCompilationHash(stats) {
+  store.dispatch({
+    type: `SET_WEBPACK_JS_COMPILATION_HASH`,
+    payload: stats.hash,
+  })
+
+  // TODO Write compilation has to a file and have it pulled by site.
+}
 
 module.exports = async program => {
   const { directory } = program
@@ -23,6 +33,8 @@ module.exports = async program => {
         reject(jsonStats.errors)
         return
       }
+
+      writeCompilationHash(jsonStats)
 
       resolve()
     })

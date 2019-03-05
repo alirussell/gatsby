@@ -2,7 +2,6 @@ const _ = require(`lodash`)
 const fs = require(`fs-extra`)
 const crypto = require(`crypto`)
 const debug = require(`debug`)(`gatsby:pages-writer`)
-const pathPackage = require(`path`)
 
 const { store, emitter, flags } = require(`../../redux/`)
 
@@ -155,51 +154,6 @@ const resetLastHash = () => {
 }
 
 exports.resetLastHash = resetLastHash
-
-function writePageManifest({ compilationDir, page, dataPath }) {
-  const filePath = page.path == `/` ? `/index` : page.path
-  const path = joinPath(compilationDir, `${filePath}.json`)
-  const body = {
-    componentChunkName: page.componentChunkName,
-    dataPath,
-  }
-  return fs.writeFile(path, JSON.stringify(body))
-}
-
-async function writePageManifests() {
-  const state = store.getState()
-  const { program, pages, jsonDataPaths } = state
-  const compilationHash = state.depGraph.compilationHash
-  const compilationDir = joinPath(
-    program.directory,
-    `public`,
-    `builds`,
-    compilationHash
-  )
-  await fs.ensureDir(compilationDir)
-  const dirtyPages = flags.isWebpackDirty()
-    ? Array.from(pages.values())
-    : [...flags.pageManifests].map(path => pages.get(path))
-
-  if (flags.isWebpackDirty()) {
-    debug(`all page manifests dirty. Writing all`)
-  } else {
-    for (const page of dirtyPages) {
-      debug(`writing page manifest`, page.jsonName)
-    }
-  }
-  return await Promise.all(
-    dirtyPages.map(page => {
-      writePageManifest({
-        compilationDir,
-        page,
-        dataPath: jsonDataPaths[page.jsonName],
-      })
-    })
-  )
-}
-
-exports.writePageManifests = writePageManifests
 
 let bootstrapFinished = false
 const debouncedWritePages = _.debounce(

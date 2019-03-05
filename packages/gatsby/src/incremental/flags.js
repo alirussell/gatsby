@@ -9,7 +9,7 @@ class Flags {
     this.staticQueryChanged = false
     this.redirectsChanged = false
     this.matchPathsChanged = false
-    this.pageManifests = new Set()
+    this.pageDatas = new Set()
     this.renderPageDirty = false
   }
   nodeTypeCollection(type, id) {
@@ -35,8 +35,8 @@ class Flags {
   matchPaths() {
     this.matchPathsChanged = true
   }
-  pageManifest(path) {
-    this.pageManifests.add(path)
+  pageData(path) {
+    this.pageDatas.add(path)
   }
   renderPage() {
     this.renderPageDirty = true

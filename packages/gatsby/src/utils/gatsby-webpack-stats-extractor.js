@@ -1,6 +1,5 @@
 const fs = require(`fs-extra`)
 const path = require(`path`)
-const { store } = require(`../redux`)
 
 class GatsbyWebpackStatsExtractor {
   constructor(options) {
@@ -31,10 +30,6 @@ class GatsbyWebpackStatsExtractor {
         all: false,
         chunkGroups: true,
         hash: true,
-      })
-      store.dispatch({
-        type: `SET_WEBPACK_JS_COMPILATION_HASH`,
-        payload: statsJson.hash,
       })
       const webpackStats = {
         ...statsJson,

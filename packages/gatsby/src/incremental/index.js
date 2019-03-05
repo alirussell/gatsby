@@ -292,13 +292,6 @@ async function build({ parentSpan }) {
     await buildProductionApp({ parentSpan: bootstrapSpan })
   }
 
-  activity = report.activityTimer(`Write page manifests`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await pagesWriter.writePageManifests()
-  activity.end()
-
   if (flags.renderPageDirty) {
     activity = report.activityTimer(`build render-page.js`, {
       parentSpan: bootstrapSpan,
