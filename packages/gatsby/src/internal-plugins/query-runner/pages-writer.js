@@ -2,6 +2,7 @@ const _ = require(`lodash`)
 const fs = require(`fs-extra`)
 const crypto = require(`crypto`)
 const debug = require(`debug`)(`gatsby:pages-writer`)
+const pathPackage = require(`path`)
 
 const { store, emitter, flags } = require(`../../redux/`)
 
@@ -156,8 +157,8 @@ const resetLastHash = () => {
 exports.resetLastHash = resetLastHash
 
 function writePageManifest({ compilationDir, page, dataPath }) {
-  const basename = `page-manifest-${page.jsonName}.json`
-  const path = joinPath(compilationDir, basename)
+  const filePath = page.path == `/` ? `/index` : page.path
+  const path = joinPath(compilationDir, `${filePath}.json`)
   const body = {
     componentChunkName: page.componentChunkName,
     dataPath,
