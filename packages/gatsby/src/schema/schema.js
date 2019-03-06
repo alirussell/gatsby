@@ -5,6 +5,7 @@ const {
   GraphQLInterfaceType,
   GraphQLUnionType,
   GraphQLObjectType,
+  defaultFieldResolver,
 } = require(`graphql`)
 const apiRunner = require(`../utils/api-runner-node`)
 const report = require(`gatsby-cli/lib/reporter`)
@@ -163,7 +164,9 @@ const processAddedType = ({ schemaComposer, type, parentSpan }) => {
     schemaComposer.addSchemaMustHaveType(typeComposer)
   }
   if (abstractTypeComposer) {
-    abstractTypeComposer.setResolveType(node => node.internal.type)
+    if (!abstractTypeComposer.getResolveType()) {
+      abstractTypeComposer.setResolveType(node => node.internal.type)
+    }
     schemaComposer.addSchemaMustHaveType(abstractTypeComposer)
   }
 }
@@ -188,11 +191,13 @@ const addSetFieldsOnGraphQLNodeTypeFields = ({
           traceId: `initial-setFieldsOnGraphQLNodeType`,
           parentSpan: parentSpan,
         })
-        // NOTE: `setFieldsOnGraphQLNodeType` only allows setting
-        // nested fields with a path as property name, i.e.
-        // `{ 'frontmatter.published': 'Boolean' }`, but not in the form
-        // `{ frontmatter: { published: 'Boolean' }}`
-        result.forEach(fields => tc.addNestedFields(fields))
+        if (result) {
+          // NOTE: `setFieldsOnGraphQLNodeType` only allows setting
+          // nested fields with a path as property name, i.e.
+          // `{ 'frontmatter.published': 'Boolean' }`, but not in the form
+          // `{ frontmatter: { published: 'Boolean' }}`
+          result.forEach(fields => tc.addNestedFields(fields))
+        }
       }
     })
   )
@@ -254,15 +259,11 @@ const addCustomResolveFunctions = async ({ schemaComposer, parentSpan }) => {
                 newConfig.args = fieldConfig.args
               }
               if (fieldConfig.resolve) {
-                if (originalResolver) {
-                  newConfig.resolve = (source, args, context, info) =>
-                    fieldConfig.resolve(source, args, context, {
-                      ...info,
-                      originalResolver,
-                    })
-                } else {
-                  newConfig.resolve = fieldConfig.resolve
-                }
+                newConfig.resolve = (source, args, context, info) =>
+                  fieldConfig.resolve(source, args, context, {
+                    ...info,
+                    originalResolver: originalResolver || defaultFieldResolver,
+                  })
               }
               tc.extendField(fieldName, newConfig)
             } else if (fieldTypeName) {
