@@ -22,7 +22,7 @@ const addInferredType = ({
 
   let exampleValue
   const oldExampleValue = exampleValueStore.get(typeName)
-  if (!oldExampleValue || dirtyNodeCollections[typeName]) {
+  if (!oldExampleValue || dirtyNodeCollections.has(typeName)) {
     console.log(`${typeName} collection dirty. Creating example value`)
     exampleValue = getExampleValue({
       nodes: nodeStore.getNodesByType(typeName),

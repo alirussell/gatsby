@@ -1,8 +1,6 @@
-const _ = require(`lodash`)
-
 class Flags {
   constructor() {
-    this.nodeTypeCollections = {}
+    this.nodeTypeCollections = new Set()
     this.schema = false
     this.queryJobs = new Set()
     this.queryResults = new Set()
@@ -12,10 +10,8 @@ class Flags {
     this.pageDatas = new Set()
     this.renderPageDirty = false
   }
-  nodeTypeCollection(type, id) {
-    _.update(this.nodeTypeCollections, type, fooSet =>
-      _.defaultTo(fooSet, new Set()).add(id)
-    )
+  nodeTypeCollection(type) {
+    this.nodeTypeCollections.add(type)
   }
   schemaDirty() {
     this.schema = true

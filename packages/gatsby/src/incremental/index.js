@@ -138,6 +138,14 @@ async function runQueries({ activity, bootstrapSpan }) {
     }
   }
 
+  const state = store.getState()
+  flags.nodeTypeCollections.forEach(type => {
+    const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
+    queries.forEach(queryId => {
+      flags.queryJob(queryId)
+    })
+  })
+
   await runQueriesForPathnames(Array.from(flags.queryJobs))
 }
 

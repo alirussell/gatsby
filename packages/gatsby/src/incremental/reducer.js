@@ -5,16 +5,25 @@ const initialState = {
   matchPaths: {},
   pageDependsOnNode: {},
   queryDependsOnNode: {},
+  queryDependsOnNodeCollection: {},
   queryResults: {},
   compilationHash: null,
 }
 // TODO Remember to handle create child, create node field
 // A child node will only be created by a transform plugin. And that will only happen if the source plugin has to recreate it. So createNodeField will never occur in a source plugin? No, a site plugin might a field to a parent node in onCreateNode
 
+const uniqPush = val => array => {
+  array = _.defaultTo(array, [])
+  if (!array.includes(val)) {
+    array.push(val)
+  }
+  return array
+}
+
 module.exports = ({ flags }) => {
   function flagDirtyNodes(state, node) {
     console.log(`flagging node`, node.internal.type, node.id)
-    flags.nodeTypeCollection(node.internal.type, node.id)
+    flags.nodeTypeCollection(node.internal.type)
     const queryId = state.queryDependsOnNode[node.id]
     if (queryId) {
       flags.queryJob(queryId)
@@ -88,7 +97,11 @@ module.exports = ({ flags }) => {
         const { nodeId, path, connection } = action.payload
         if (connection) {
           console.log(`page->nodeType dep`, connection, path)
-          _.set(state, [`queryDependsOnNodeCollection`, connection], path)
+          _.update(
+            state,
+            [`queryDependsOnNodeCollection`, connection],
+            uniqPush(path)
+          )
         } else {
           console.log(`page->node dep`, nodeId, path)
           _.set(state, [`queryDependsOnNode`, nodeId], path)
