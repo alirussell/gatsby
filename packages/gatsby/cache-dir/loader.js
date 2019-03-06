@@ -139,9 +139,15 @@ const fetchResource = (resourceName, url = jsonDataPaths[resourceName]) => {
   return runFetchResource(resourceName, resourceFunction)
 }
 
+const stripSurroundingSlashes = s => {
+  s = s[0] === `/` ? s.slice(1) : s
+  s = s.endsWith(`/`) ? s.slice(0, -1) : s
+  return s
+}
+
 const makePageDataUrl = path => {
-  const fixedPath = path === `/` ? `/index/` : path
-  return `${__PATH_PREFIX__}/page-data${fixedPath}page-data.json`
+  const fixedPath = path === `/` ? `index` : stripSurroundingSlashes(path)
+  return `${__PATH_PREFIX__}/page-data/${fixedPath}/page-data.json`
 }
 
 const fetchPageData = path => {

@@ -124,7 +124,7 @@ ${formatErrorDetails(errorDetails)}`)
 
   // TODO put all query results in queue and write concurrently so
   // we're not waiting on disk i/o all the time
-  
+
   if (queryJob.isPage) {
     const state = store.getState()
     const pagePath = queryJob.id
