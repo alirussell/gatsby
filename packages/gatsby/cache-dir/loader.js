@@ -297,6 +297,14 @@ const queue = {
     return true
   },
 
+  getResourceURLsForPathname: realPath => {
+    if (realPath) {
+      return [makePageDataUrl(realPath)]
+    } else {
+      return null
+    }
+  },
+
   // TODO
   // getPage: pathname => findPage(pathname),
 

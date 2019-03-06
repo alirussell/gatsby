@@ -34,6 +34,7 @@ exports.onServiceWorkerActive = ({
       prefetchedResources.push(resource)
     )
   )
+  // TODO figure out way to prefetch component URLs. If we need to?
 
   const resources = [...headerResources, ...prefetchedResources]
   resources.forEach(resource => {
