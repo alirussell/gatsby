@@ -108,7 +108,11 @@ module.exports = (config = {}) => {
   // Create fake little site with a plugin for testing this
   // w/ snapshots. Move plugin processing to its own module.
   // Also test adding to redux store.
-  const processPlugin = plugin => {
+  const processPlugin = rawPlugin => {
+    // Need to deep clone so the plugin objects aren't modified in the
+    // redux store. We're only returning plugin objects to be saved in
+    // flattenedPlugins
+    const plugin = _.cloneDeep(rawPlugin)
     if (_.isString(plugin)) {
       const info = resolvePlugin(plugin)
 
