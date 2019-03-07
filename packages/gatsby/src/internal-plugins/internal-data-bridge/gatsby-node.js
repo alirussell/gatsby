@@ -61,6 +61,30 @@ exports.sourceNodes = ({ createContentDigest, actions, store }) => {
     },
   })
 
+  // Recreate pages if in incremental mode. Since they won't be
+  // created onCreatePage (since page will only be touched)
+  for (const [, page] of state.pages) {
+    // eslint-disable-next-line
+    const { updatedAt, ...pageWithoutUpdated } = page
+
+    // Add page.
+    createNode({
+      ...pageWithoutUpdated,
+      id: createPageId(page.path),
+      parent: null,
+      children: [],
+      internal: {
+        type: `SitePage`,
+        contentDigest: createContentDigest(pageWithoutUpdated),
+        ___gatsbyDependsOnPage: page.path,
+        description:
+          page.pluginCreatorId === `Plugin default-site-plugin`
+            ? `Your site's "gatsby-node.js"`
+            : page.pluginCreatorId,
+      },
+    })
+  }
+
   flattenedPlugins.forEach(plugin => {
     plugin.pluginFilepath = plugin.resolve
     createNode({

@@ -8,6 +8,10 @@ const {
 const { addInferredFields } = require(`./add-inferred-fields`)
 const getInferConfig = require(`./get-infer-config`)
 
+const exampleValueIgnoreFields = {
+  Directory: [`accessTime`, `atimeMs`, `atime`],
+}
+
 const addInferredType = ({
   schemaComposer,
   typeComposer,
@@ -33,7 +37,13 @@ const addInferredType = ({
         `$loki`,
       ],
     })
-    if (!_.isEqual(exampleValue, exampleValueStore.get(typeName))) {
+    const omitFields = exampleValueIgnoreFields[typeName] || []
+    if (
+      !_.isEqual(
+        _.omit(exampleValue, omitFields),
+        _.omit(exampleValueStore.get(typeName), omitFields)
+      )
+    ) {
       console.log(`${typeName} exampleValue has changed`)
       exampleValueStore.save(typeName, exampleValue)
     }

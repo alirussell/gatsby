@@ -5,12 +5,14 @@ const report = require(`gatsby-cli/lib/reporter`)
 const loadPlugins = require(`../bootstrap/load-plugins`)
 const apiRunner = require(`../utils/api-runner-node`)
 const { store, emitter, flags } = require(`../redux`)
+const convertHrtime = require(`convert-hrtime`)
 const nodeTracking = require(`../db/node-tracking`)
 const { graphql } = require(`graphql`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const buildProductionBundle = require(`../commands/build-javascript`)
+const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
 const buildHtml = require(`../commands/build-html`)
 const {
   runQueriesForPathnames,
@@ -148,7 +150,22 @@ async function runQueries({ activity, bootstrapSpan }) {
     })
   })
 
+  // Run queries
+  activity = report.activityTimer(`run graphql queries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  const startQueries = process.hrtime()
+  queryQueue.on(`task_finish`, () => {
+    const stats = queryQueue.getStats()
+    activity.setStatus(
+      `${stats.total}/${stats.peak} ${(
+        stats.total / convertHrtime(process.hrtime(startQueries)).seconds
+      ).toFixed(2)} queries/second`
+    )
+  })
   await runQueriesForPathnames(Array.from(flags.queryJobs))
+  activity.end()
 }
 
 async function writeRedirects({ activity, bootstrapSpan }) {
@@ -237,6 +254,12 @@ async function build({ parentSpan }) {
   // By now, our nodes database has been loaded, so ensure that we
   // have tracked all inline objects
   nodeTracking.trackDbNodes()
+
+  // onPreBootstrap
+  activity = report.activityTimer(`onPreBootstrap`)
+  activity.start()
+  await apiRunner(`onPreBootstrap`)
+  activity.end()
 
   // Source nodes
   activity = report.activityTimer(`source and transform nodes`, {
