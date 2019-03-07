@@ -206,7 +206,7 @@ async function build({ parentSpan }) {
   const { directory } = config
   const cacheDirectory = `${directory}/.cache`
   let activity
-  console.log(store.getState().depGraph)
+  // console.log(store.getState().depGraph)
 
   // Start plugin runner which listens to the store
   // and invokes Gatsby API based on actions.
