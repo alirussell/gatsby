@@ -651,7 +651,7 @@ actions.createNode = (
           payload: node,
         }
       }
-      for (const child in findChildrenRecursively(oldNode.children)) {
+      for (const child of findChildrenRecursively(oldNode.children)) {
         reduxActions.push(createDeleteAction(getNode(child)))
       }
     }

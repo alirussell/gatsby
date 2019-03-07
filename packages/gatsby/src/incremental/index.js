@@ -18,6 +18,7 @@ const {
 const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`)
   .default
 const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writer`)
+const withResolverContext = require(`../schema/context`)
 require(`../db`).startAutosave()
 
 async function initLoki({ cacheDirectory }) {
@@ -32,13 +33,6 @@ async function initLoki({ cacheDirectory }) {
       `Error starting DB. Perhaps try deleting ${path.dirname(dbSaveFile)}`
     )
   }
-}
-
-async function sourceNodes() {
-  await apiRunner(`sourceNodes`, {
-    traceId: `initial-sourceNodes`,
-    waitForCascadingActions: true,
-  })
 }
 
 async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
@@ -113,6 +107,14 @@ async function runQueries({ activity, bootstrapSpan }) {
   })
   activity.start()
   await apiRunner(`onPreExtractQueries`, { parentSpan: activity.span })
+  activity.end()
+
+  // Update Schema for SitePage.
+  activity = report.activityTimer(`update schema`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
   activity.end()
 
   // TODO clearInactiveComponents
@@ -241,7 +243,7 @@ async function build({ parentSpan }) {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await sourceNodes()
+  await require(`../utils/source-nodes`)({ parentSpan: activity.span })
   activity.end()
 
   // Create Schema.
@@ -254,7 +256,13 @@ async function build({ parentSpan }) {
 
   const graphqlRunner = (query, context = {}) => {
     const schema = store.getState().schema
-    return graphql(schema, query, context, context, context)
+    return graphql(
+      schema,
+      query,
+      context,
+      withResolverContext(context, schema),
+      context
+    )
   }
 
   await createPages({ activity, bootstrapSpan, graphqlRunner })
