@@ -2,9 +2,6 @@ const _ = require(`lodash`)
 const {
   isSpecifiedScalarType,
   isIntrospectionType,
-  GraphQLInterfaceType,
-  GraphQLUnionType,
-  GraphQLObjectType,
   defaultFieldResolver,
 } = require(`graphql`)
 const apiRunner = require(`../utils/api-runner-node`)
@@ -15,6 +12,7 @@ const { findOne, findManyPaginated } = require(`./resolvers`)
 const { getPagination } = require(`./types/pagination`)
 const { getSortInput } = require(`./types/sort`)
 const { getFilterInput } = require(`./types/filter`)
+const { isGatsbyType, GatsbyGraphQLTypeKind } = require(`./types/type-builders`)
 
 const buildSchema = async ({
   schemaComposer,
@@ -146,28 +144,83 @@ const addTypes = ({ schemaComposer, types, parentSpan }) => {
       addedTypes.forEach(type =>
         processAddedType({ schemaComposer, type, parentSpan })
       )
+    } else if (isGatsbyType(typeOrTypeDef)) {
+      const type = createTypeComposerFromGatsbyType({
+        schemaComposer,
+        type: typeOrTypeDef,
+        parentSpan,
+      })
+      if (type) {
+        processAddedType({ schemaComposer, type, parentSpan })
+      }
     } else {
-      schemaComposer.add(typeOrTypeDef)
       processAddedType({ schemaComposer, type: typeOrTypeDef, parentSpan })
     }
   })
 }
 
 const processAddedType = ({ schemaComposer, type, parentSpan }) => {
-  let abstractTypeComposer
-  if (type instanceof GraphQLInterfaceType) {
-    abstractTypeComposer = schemaComposer.getOrCreateIFTC(type.name)
-  } else if (type instanceof GraphQLUnionType) {
-    abstractTypeComposer = schemaComposer.getOrCreateUTC(type.name)
-  } else if (type instanceof GraphQLObjectType) {
-    const typeComposer = schemaComposer.getOrCreateTC(type.name)
-    schemaComposer.addSchemaMustHaveType(typeComposer)
-  }
-  if (abstractTypeComposer) {
-    if (!abstractTypeComposer.getResolveType()) {
-      abstractTypeComposer.setResolveType(node => node.internal.type)
+  const typeName = schemaComposer.addAsComposer(type)
+  const typeComposer = schemaComposer.get(typeName)
+  if (
+    typeComposer instanceof schemaComposer.InterfaceTypeComposer ||
+    typeComposer instanceof schemaComposer.UnionTypeComposer
+  ) {
+    if (!typeComposer.getResolveType()) {
+      typeComposer.setResolveType(node => node.internal.type)
     }
-    schemaComposer.addSchemaMustHaveType(abstractTypeComposer)
+  }
+  schemaComposer.addSchemaMustHaveType(typeComposer)
+}
+
+const createTypeComposerFromGatsbyType = ({
+  schemaComposer,
+  type,
+  parentSpan,
+}) => {
+  switch (type.kind) {
+    case GatsbyGraphQLTypeKind.OBJECT: {
+      return schemaComposer.TypeComposer.createTemp({
+        ...type.config,
+        interfaces: () => {
+          if (type.config.interfaces) {
+            return type.config.interfaces.map(iface => {
+              if (typeof iface === `string`) {
+                return schemaComposer.getIFTC(iface).getType()
+              } else {
+                return iface
+              }
+            })
+          } else {
+            return []
+          }
+        },
+      })
+    }
+    case GatsbyGraphQLTypeKind.INPUT_OBJECT: {
+      return schemaComposer.InputTypeComposer.createTemp(type.config)
+    }
+    case GatsbyGraphQLTypeKind.UNION: {
+      return schemaComposer.UnionTypeComposer.createTemp({
+        ...type.config,
+        types: () => {
+          if (type.types) {
+            return type.types.map(typeName =>
+              schemaComposer.getTC(typeName).getType()
+            )
+          } else {
+            return []
+          }
+        },
+      })
+    }
+    case GatsbyGraphQLTypeKind.INTERFACE: {
+      return schemaComposer.InterfaceTypeComposer.createTemp(type.config)
+    }
+    default: {
+      console.warn(`Illegal type definition: ${JSON.stringify(type.config)}`)
+      return null
+    }
   }
 }
 
@@ -277,7 +330,7 @@ const addCustomResolveFunctions = async ({ schemaComposer, parentSpan }) => {
         })
       } else {
         report.warn(
-          `\`createResolvers\` passed resolvers for type \`${typeName}\` that doesn't exist in the schema. Use \`addTypeDefs\` to add the type before adding resolvers.`
+          `\`createResolvers\` passed resolvers for type \`${typeName}\` that doesn't exist in the schema. Use \`createTypes\` to add the type before adding resolvers.`
         )
       }
     })
@@ -298,7 +351,6 @@ const addResolvers = ({ schemaComposer, typeComposer }) => {
   // NOTE: No need to clear the SortInput, that will be regenerated anyway.
   // Also see the comment on the skipped test in `rebuild-schema`.
   typeComposer.removeInputTypeComposer()
-  schemaComposer.delete(`${typeName}FilterInput`)
 
   const sortInputTC = getSortInput({
     schemaComposer,
@@ -307,6 +359,9 @@ const addResolvers = ({ schemaComposer, typeComposer }) => {
   const filterInputTC = getFilterInput({
     schemaComposer,
     typeComposer,
+    filterInputComposer: schemaComposer.getOrCreateITC(
+      `${typeName}FilterInput`
+    ),
   })
   const paginationTC = getPagination({
     schemaComposer,
