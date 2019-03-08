@@ -267,7 +267,7 @@ async function build({ parentSpan }) {
 
   // full build inits the cache here. We don't need to since no code
   // has changed
-  
+
   // onPreBootstrap
   activity = report.activityTimer(`onPreBootstrap`)
   activity.start()
