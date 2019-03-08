@@ -53,61 +53,7 @@ type BootstrapArgs = {
   parentSpan: Object,
 }
 
-async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
-  // Collect pages.
-  activity = report.activityTimer(`createPages`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await apiRunnerNode(`createPages`, {
-    graphql: graphqlRunner,
-    traceId: `initial-createPages`,
-    waitForCascadingActions: true,
-    parentSpan: activity.span,
-  })
-  activity.end()
-
-  // A variant on createPages for plugins that want to
-  // have full control over adding/removing pages. The normal
-  // "createPages" API is called every time (during development)
-  // that data changes.
-  activity = report.activityTimer(`createPagesStatefully`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await apiRunnerNode(`createPagesStatefully`, {
-    graphql: graphqlRunner,
-    traceId: `initial-createPagesStatefully`,
-    waitForCascadingActions: true,
-    parentSpan: activity.span,
-  })
-  activity.end()
-}
-
-module.exports = async (args: BootstrapArgs) => {
-  const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
-  const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
-
-  flags.matchPaths()
-
-  // Start plugin runner which listens to the store
-  // and invokes Gatsby API based on actions.
-  require(`../redux/plugin-runner`)
-
-  const directory = slash(args.directory)
-
-  const program = {
-    ...args,
-    browserslist: getBrowserslist(directory),
-    // Fix program directory path for windows env.
-    directory,
-  }
-
-  store.dispatch({
-    type: `SET_PROGRAM`,
-    payload: program,
-  })
-
+async function initConfig({ bootstrapSpan, program }) {
   // Try opening the site's gatsby-config.js file.
   let activity = report.activityTimer(`open and validate gatsby-configs`, {
     parentSpan: bootstrapSpan,
@@ -140,23 +86,32 @@ module.exports = async (args: BootstrapArgs) => {
   })
 
   activity.end()
+  return config
+}
 
-  activity = report.activityTimer(`load plugins`)
-  activity.start()
-  const flattenedPlugins = await loadPlugins(config)
-  activity.end()
-
-  // onPreInit
-  activity = report.activityTimer(`onPreInit`, {
+async function initLoki({ bootstrapSpan, cacheDirectory }) {
+  const activity = report.activityTimer(`start nodes db`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await apiRunnerNode(`onPreInit`, { parentSpan: activity.span })
+  const loki = require(`../db/loki`)
+  const dbSaveFile = `${cacheDirectory}/loki/loki.db`
+  try {
+    await loki.start({
+      saveFile: dbSaveFile,
+    })
+  } catch (e) {
+    report.error(
+      `Error starting DB. Perhaps try deleting ${path.dirname(dbSaveFile)}`
+    )
+  }
   activity.end()
+}
 
+async function deleteHtmlCss({ bootstrapSpan }) {
   // Delete html and css files from the public directory as we don't want
   // deleted pages and styles from previous builds to stick around.
-  activity = report.activityTimer(
+  const activity = report.activityTimer(
     `delete html and css files from previous builds`,
     {
       parentSpan: bootstrapSpan,
@@ -170,17 +125,9 @@ module.exports = async (args: BootstrapArgs) => {
     `!public/static/**/*.{html,css}`,
   ])
   activity.end()
+}
 
-  activity = report.activityTimer(`initialize cache`)
-  activity.start()
-  // Check if any plugins have been updated since our last run. If so
-  // we delete the cache is there's likely been changes
-  // since the previous run.
-  //
-  // We do this by creating a hash of all the version numbers of installed
-  // plugins, the site's package.json, gatsby-config.js, and gatsby-node.js.
-  // The last, gatsby-node.js, is important as many gatsby sites put important
-  // logic in there e.g. generating slugs for custom pages.
+async function getPluginConfigHash({ program, flattenedPlugins }) {
   const pluginVersions = flattenedPlugins.map(p => p.version)
   const hashes = await Promise.all([
     md5File(`package.json`),
@@ -191,10 +138,26 @@ module.exports = async (args: BootstrapArgs) => {
       md5File(`${program.directory}/gatsby-node.js`).catch(() => {})
     ), // ignore as this file isn't required),
   ])
-  const pluginsHash = crypto
+  return crypto
     .createHash(`md5`)
     .update(JSON.stringify(pluginVersions.concat(hashes)))
     .digest(`hex`)
+}
+
+async function initCache(context) {
+  const { cacheDirectory } = context
+  const activity = report.activityTimer(`initialize cache`)
+  activity.start()
+
+  // Check if any plugins have been updated since our last run. If so
+  // we delete the cache is there's likely been changes
+  // since the previous run.
+  //
+  // We do this by creating a hash of all the version numbers of installed
+  // plugins, the site's package.json, gatsby-config.js, and gatsby-node.js.
+  // The last, gatsby-node.js, is important as many gatsby sites put important
+  // logic in there e.g. generating slugs for custom pages.
+  const pluginsHash = getPluginConfigHash(context)
   let state = store.getState()
   const oldPluginsHash = state && state.status ? state.status.PLUGINS_HASH : ``
 
@@ -210,7 +173,6 @@ module.exports = async (args: BootstrapArgs) => {
       data
     `)
   }
-  const cacheDirectory = `${program.directory}/.cache`
   if (!oldPluginsHash || pluginsHash !== oldPluginsHash) {
     try {
       // Attempt to empty dir if remove fails,
@@ -236,39 +198,16 @@ module.exports = async (args: BootstrapArgs) => {
   // directory.
   await fs.ensureDir(cacheDirectory)
 
-  // Ensure the public/static directory
-  await fs.ensureDir(`${program.directory}/public/static`)
-
   activity.end()
+}
 
-  if (process.env.GATSBY_DB_NODES === `loki`) {
-    const loki = require(`../db/loki`)
-    // Start the nodes database (in memory loki js with interval disk
-    // saves). If data was saved from a previous build, it will be
-    // loaded here
-    activity = report.activityTimer(`start nodes db`, {
-      parentSpan: bootstrapSpan,
-    })
-    activity.start()
-    const dbSaveFile = `${cacheDirectory}/loki/loki.db`
-    try {
-      await loki.start({
-        saveFile: dbSaveFile,
-      })
-    } catch (e) {
-      report.error(
-        `Error starting DB. Perhaps try deleting ${path.dirname(dbSaveFile)}`
-      )
-    }
-    activity.end()
-  }
-
-  // By now, our nodes database has been loaded, so ensure that we
-  // have tracked all inline objects
-  nodeTracking.trackDbNodes()
-
+async function copyGatsbyFiles({
+  bootstrapSpan,
+  cacheDirectory,
+  flattenedPlugins,
+}) {
   // Copy our site files to the root of the site.
-  activity = report.activityTimer(`copy gatsby files`, {
+  let activity = report.activityTimer(`copy gatsby files`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
@@ -378,9 +317,131 @@ module.exports = async (args: BootstrapArgs) => {
   fs.writeFileSync(`${siteDir}/api-runner-ssr.js`, sSRAPIRunner, `utf-8`)
 
   activity.end()
+}
+
+async function setExtensions({ bootstrapSpan }) {
+  // Collect resolvable extensions and attach to program. This is used
+  // by plugin-page-creator (in create pages statefully phase). Also used in webpack config
+  const extensions = [`.mjs`, `.js`, `.jsx`, `.wasm`, `.json`]
+  // Change to this being an action and plugins implement `onPreBootstrap`
+  // for adding extensions.
+  const apiResults = await apiRunnerNode(`resolvableExtensions`, {
+    traceId: `initial-resolvableExtensions`,
+    parentSpan: bootstrapSpan,
+  })
+
+  store.dispatch({
+    type: `SET_PROGRAM_EXTENSIONS`,
+    payload: _.flattenDeep([extensions, apiResults]),
+  })
+}
+
+async function createPages({ bootstrapSpan, graphqlRunner }) {
+  // Collect pages.
+  let activity = report.activityTimer(`createPages`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunnerNode(`createPages`, {
+    graphql: graphqlRunner,
+    traceId: `initial-createPages`,
+    waitForCascadingActions: true,
+    parentSpan: activity.span,
+  })
+  activity.end()
+
+  // A variant on createPages for plugins that want to
+  // have full control over adding/removing pages. The normal
+  // "createPages" API is called every time (during development)
+  // that data changes.
+  activity = report.activityTimer(`createPagesStatefully`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunnerNode(`createPagesStatefully`, {
+    graphql: graphqlRunner,
+    traceId: `initial-createPagesStatefully`,
+    waitForCascadingActions: true,
+    parentSpan: activity.span,
+  })
+  activity.end()
+}
+
+module.exports = async (args: BootstrapArgs) => {
+  const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
+  const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
+  const cacheDirectory = `${program.directory}/.cache`
+
+  flags.matchPaths()
+
+  const directory = slash(args.directory)
+
+  const program = {
+    ...args,
+    browserslist: getBrowserslist(directory),
+    // Fix program directory path for windows env.
+    directory,
+  }
+
+  store.dispatch({
+    type: `SET_PROGRAM`,
+    payload: program,
+  })
+
+  const bootstrapContext = {
+    cacheDirectory,
+    bootstrapSpan,
+    program,
+  }
+
+  const config = await initConfig(bootstrapContext)
+
+  // Same as incremental from here
+
+  // Start plugin runner which listens to the store
+  // and invokes Gatsby API based on actions.
+  require(`../redux/plugin-runner`)
+
+  let activity = report.activityTimer(`load plugins`)
+  activity.start()
+  const flattenedPlugins = await loadPlugins(config)
+  bootstrapContext.flattenedPlugins = flattenedPlugins
+  activity.end()
+
+  // onPreInit
+  activity = report.activityTimer(`onPreInit`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunnerNode(`onPreInit`, { parentSpan: activity.span })
+  activity.end()
+
+  if (process.env.GATSBY_DB_NODES === `loki`) {
+    initLoki(bootstrapContext)
+  }
+
+  // By now, our nodes database has been loaded, so ensure that we
+  // have tracked all inline objects
+  nodeTracking.trackDbNodes()
+
+  // Not the same
+
+  await deleteHtmlCss(bootstrapContext)
+
+  await initCache(bootstrapContext, flattenedPlugins)
+
+  // Ensure the public/static directory
+  await fs.ensureDir(`${program.directory}/public/static`)
+
+  await copyGatsbyFiles(bootstrapContext)
+
+  await setExtensions(bootstrapContext)
+
   /**
    * Start the main bootstrap processes.
    */
+
+  // Same as incremental again
 
   // onPreBootstrap
   activity = report.activityTimer(`onPreBootstrap`)
@@ -403,20 +464,6 @@ module.exports = async (args: BootstrapArgs) => {
   activity.start()
   await require(`../schema`).build({ parentSpan: activity.span })
   activity.end()
-
-  // Collect resolvable extensions and attach to program.
-  const extensions = [`.mjs`, `.js`, `.jsx`, `.wasm`, `.json`]
-  // Change to this being an action and plugins implement `onPreBootstrap`
-  // for adding extensions.
-  const apiResults = await apiRunnerNode(`resolvableExtensions`, {
-    traceId: `initial-resolvableExtensions`,
-    parentSpan: bootstrapSpan,
-  })
-
-  store.dispatch({
-    type: `SET_PROGRAM_EXTENSIONS`,
-    payload: _.flattenDeep([extensions, apiResults]),
-  })
 
   const graphqlRunner = (query, context = {}) => {
     const schema = store.getState().schema

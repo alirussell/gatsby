@@ -23,7 +23,11 @@ const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writ
 const withResolverContext = require(`../schema/context`)
 require(`../db`).startAutosave()
 
-async function initLoki({ cacheDirectory }) {
+async function initLoki({ bootstrapSpan, cacheDirectory }) {
+  const activity = report.activityTimer(`start nodes db`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
   const loki = require(`../db/loki`)
   const dbSaveFile = `${cacheDirectory}/loki/loki.db`
   try {
@@ -35,11 +39,12 @@ async function initLoki({ cacheDirectory }) {
       `Error starting DB. Perhaps try deleting ${path.dirname(dbSaveFile)}`
     )
   }
+  activity.end()
 }
 
-async function createPages({ activity, bootstrapSpan, graphqlRunner }) {
+async function createPages({ bootstrapSpan, graphqlRunner }) {
   // Collect pages.
-  activity = report.activityTimer(`createPages`, {
+  let activity = report.activityTimer(`createPages`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
@@ -103,8 +108,8 @@ function saveQuery(components, component, query) {
   }
 }
 
-async function runQueries({ activity, bootstrapSpan }) {
-  activity = report.activityTimer(`onPreExtractQueries`, {
+async function runQueries({ bootstrapSpan }) {
+  let activity = report.activityTimer(`onPreExtractQueries`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
@@ -121,7 +126,7 @@ async function runQueries({ activity, bootstrapSpan }) {
 
   // TODO clearInactiveComponents
   if (shouldRecompileQueries()) {
-    console.log(`recompiling queries`)
+    console.log(`recompiling queries because schema changed`)
     // Extract queries
     activity = report.activityTimer(`extract queries from components`, {
       parentSpan: bootstrapSpan,
@@ -146,6 +151,7 @@ async function runQueries({ activity, bootstrapSpan }) {
   flags.nodeTypeCollections.forEach(type => {
     const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
     queries.forEach(queryId => {
+      console.log(`flagging ${type} type query`)
       flags.queryJob(queryId)
     })
   })
@@ -164,13 +170,14 @@ async function runQueries({ activity, bootstrapSpan }) {
       ).toFixed(2)} queries/second`
     )
   })
+  console.log(`query jobs`, flags.queryJobs)
   await runQueriesForPathnames(Array.from(flags.queryJobs))
   activity.end()
 }
 
-async function writeRedirects({ activity, bootstrapSpan }) {
+async function writeRedirects({ bootstrapSpan }) {
   // Write out redirects.
-  activity = report.activityTimer(`write out redirect data`, {
+  const activity = report.activityTimer(`write out redirect data`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
@@ -201,12 +208,10 @@ function reportFailure(msg, err) {
   report.panic(msg, err)
 }
 
-async function buildProductionApp({ parentSpan }) {
-  const program = store.getState().program
-  let activity
-  activity = report.activityTimer(
+async function buildProductionApp({ bootstrapSpan, program }) {
+  const activity = report.activityTimer(
     `Building production JavaScript and CSS bundles`,
-    { parentSpan }
+    { parentSpan: bootstrapSpan }
   )
   activity.start()
   await buildProductionBundle(program).catch(err => {
@@ -221,9 +226,19 @@ async function build({ parentSpan }) {
   const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
   const config = store.getState().config
   const { directory } = config
+  const program = store.getState().program
   const cacheDirectory = `${directory}/.cache`
   let activity
   // console.log(store.getState().depGraph)
+
+  const bootstrapContext = {
+    cacheDirectory,
+    activity,
+    bootstrapSpan,
+    program,
+  }
+
+  // Same as Full build from here
 
   // Start plugin runner which listens to the store
   // and invokes Gatsby API based on actions.
@@ -243,18 +258,16 @@ async function build({ parentSpan }) {
   activity.end()
 
   if (process.env.GATSBY_DB_NODES === `loki`) {
-    activity = report.activityTimer(`start nodes db`, {
-      parentSpan: bootstrapSpan,
-    })
-    activity.start()
-    initLoki({ cacheDirectory })
-    activity.end()
+    initLoki(bootstrapContext)
   }
 
   // By now, our nodes database has been loaded, so ensure that we
   // have tracked all inline objects
   nodeTracking.trackDbNodes()
 
+  // full build inits the cache here. We don't need to since no code
+  // has changed
+  
   // onPreBootstrap
   activity = report.activityTimer(`onPreBootstrap`)
   activity.start()
@@ -328,7 +341,7 @@ async function build({ parentSpan }) {
   // TODO build.copyStaticDir()?
 
   if (shouldbuildProductionApp()) {
-    await buildProductionApp({ parentSpan: bootstrapSpan })
+    await buildProductionApp(bootstrapContext)
   }
 
   if (flags.renderPageDirty) {
