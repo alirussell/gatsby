@@ -25,6 +25,12 @@ exports.createFileNode = async (
   }
 
   const stats = await fs.stat(slashedFile.absolutePath)
+  if (pluginOptions.omitFields) {
+    pluginOptions.omitFields.forEach(field => {
+      delete stats[field]
+    })
+  }
+
   let internal
   if (stats.isDirectory()) {
     const contentDigest = crypto

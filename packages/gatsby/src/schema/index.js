@@ -7,6 +7,30 @@ const { createSchemaComposer } = require(`./schema-composer`)
 const { buildSchema, rebuildSchemaWithSitePage } = require(`./schema`)
 const { TypeConflictReporter } = require(`./infer/type-conflict-reporter`)
 
+function makeExampleValueStore() {
+  return {
+    get: typeName => store.getState().depGraph.exampleValues[typeName],
+    save: (typeName, exampleValue) => {
+      store.dispatch({
+        type: `SET_EXAMPLE_VALUE`,
+        payload: {
+          typeName,
+          exampleValue,
+        },
+      })
+    },
+    saveInferredTypes: printedInferredTypes => {
+      console.log(`saving inferred types`)
+      store.dispatch({
+        type: `SET_INFERRED_TYPES`,
+        payload: printedInferredTypes,
+      })
+      flags.schemaDirty()
+    },
+    getInferredTypes: () => store.getState().depGraph.inferredTypes,
+  }
+}
+
 module.exports.build = async ({ parentSpan }) => {
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
   const span = tracer.startSpan(`build schema`, spanArgs)
@@ -18,19 +42,6 @@ module.exports.build = async ({ parentSpan }) => {
 
   const typeConflictReporter = new TypeConflictReporter()
 
-  const exampleValueStore = {
-    get: typeName => store.getState().depGraph.exampleValues[typeName],
-    save: (typeName, exampleValue) => {
-      store.dispatch({
-        type: `SET_EXAMPLE_VALUE`,
-        payload: {
-          typeName,
-          exampleValue,
-        },
-      })
-      flags.schemaDirty()
-    },
-  }
   const dirtyNodeCollections = flags.nodeTypeCollections
 
   const schemaComposer = createSchemaComposer()
@@ -40,7 +51,7 @@ module.exports.build = async ({ parentSpan }) => {
     types,
     thirdPartySchemas,
     typeMapping,
-    exampleValueStore,
+    exampleValueStore: makeExampleValueStore(),
     dirtyNodeCollections,
     typeConflictReporter,
     parentSpan,
@@ -74,26 +85,13 @@ module.exports.rebuildWithSitePage = async ({ parentSpan }) => {
 
   const typeConflictReporter = new TypeConflictReporter()
 
-  const exampleValueStore = {
-    get: typeName => store.getState().depGraph.exampleValues[typeName],
-    save: (typeName, exampleValue) => {
-      store.dispatch({
-        type: `SET_EXAMPLE_VALUE`,
-        payload: {
-          typeName,
-          exampleValue,
-        },
-      })
-      flags.schemaDirty()
-    },
-  }
   const dirtyNodeCollections = flags.nodeTypeCollections
 
   const schema = await rebuildSchemaWithSitePage({
     schemaComposer,
     nodeStore,
     typeMapping,
-    exampleValueStore,
+    exampleValueStore: makeExampleValueStore(),
     dirtyNodeCollections,
     typeConflictReporter,
     parentSpan,

@@ -7,10 +7,7 @@ const {
 } = require(`../types/node-interface`)
 const { addInferredFields } = require(`./add-inferred-fields`)
 const getInferConfig = require(`./get-infer-config`)
-
-const exampleValueIgnoreFields = {
-  Directory: [`accessTime`, `atimeMs`, `atime`],
-}
+const { printType } = require(`graphql`)
 
 const addInferredType = ({
   schemaComposer,
@@ -37,14 +34,12 @@ const addInferredType = ({
         `$loki`,
       ],
     })
-    const omitFields = exampleValueIgnoreFields[typeName] || []
-    if (
-      !_.isEqual(
-        _.omit(exampleValue, omitFields),
-        _.omit(exampleValueStore.get(typeName), omitFields)
-      )
-    ) {
-      console.log(`${typeName} exampleValue has changed`)
+    const oldValue = exampleValueStore.get(typeName)
+    if (!_.isEqual(exampleValue, oldValue)) {
+      // if (process.env.INCREMENTAL === `true`) {
+      //   console.log(`${typeName} exampleValue has changed`)
+      //   console.log(diff(oldValue, exampleValue))
+      // }
       exampleValueStore.save(typeName, exampleValue)
     }
   } else {
@@ -120,6 +115,13 @@ const addInferredTypes = ({
    `)
     })
     report.panic(`Building schema failed`)
+  }
+
+  const printedTypes = typeNames.map(typeName =>
+    printType(schemaComposer.getTC(typeName).getType())
+  )
+  if (!_.isEqual(printedTypes, exampleValueStore.getInferredTypes())) {
+    exampleValueStore.saveInferredTypes(printedTypes)
   }
 
   return typeComposers
