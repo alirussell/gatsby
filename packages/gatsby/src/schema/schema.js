@@ -63,6 +63,7 @@ const rebuildSchemaWithSitePage = async ({
     typeMapping,
     parentSpan,
   })
+  exampleValueStore.saveTypeIfChanged(schemaComposer, `SitePage`)
   await processTypeComposer({
     schemaComposer,
     typeComposer,
@@ -98,6 +99,7 @@ const updateSchemaComposer = async ({
     typeMapping,
     parentSpan,
   })
+
   await addSetFieldsOnGraphQLNodeTypeFields({
     schemaComposer,
     nodeStore,

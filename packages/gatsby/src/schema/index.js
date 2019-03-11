@@ -1,11 +1,13 @@
 /* @flow */
 
+const _ = require(`lodash`)
 const tracer = require(`opentracing`).globalTracer()
 const { store, flags } = require(`../redux`)
 const nodeStore = require(`../db/nodes`)
 const { createSchemaComposer } = require(`./schema-composer`)
 const { buildSchema, rebuildSchemaWithSitePage } = require(`./schema`)
 const { TypeConflictReporter } = require(`./infer/type-conflict-reporter`)
+const { printType } = require(`graphql`)
 
 function makeExampleValueStore() {
   return {
@@ -19,13 +21,28 @@ function makeExampleValueStore() {
         },
       })
     },
-    saveInferredTypes: printedInferredTypes => {
+    saveInferredTypes: (typeNames, printedInferredTypes) => {
       console.log(`saving inferred types`)
       store.dispatch({
         type: `SET_INFERRED_TYPES`,
-        payload: printedInferredTypes,
+        payload: _.zipObject(typeNames, printedInferredTypes),
       })
       flags.schemaDirty()
+    },
+    saveTypeIfChanged: (schemaComposer, typeName) => {
+      const storedTypes = store.getState().depGraph.inferredTypes
+      const printedType = printType(schemaComposer.getTC(typeName).getType())
+      if (storedTypes[typeName] !== printedType) {
+        console.log(`saving inferred type: [${typeName}]`)
+        store.dispatch({
+          type: `SET_INFERRED_TYPE`,
+          payload: {
+            typeName,
+            printedType,
+          },
+        })
+        flags.schemaDirty()
+      }
     },
     getInferredTypes: () => store.getState().depGraph.inferredTypes,
   }
@@ -72,7 +89,6 @@ module.exports.build = async ({ parentSpan }) => {
 }
 
 module.exports.rebuildWithSitePage = async ({ parentSpan }) => {
-  console.log(`with site page`)
   const spanArgs = parentSpan ? { childOf: parentSpan } : {}
   const span = tracer.startSpan(
     `rebuild schema with SitePage context`,

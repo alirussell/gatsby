@@ -2,7 +2,7 @@ const _ = require(`lodash`)
 
 const initialState = {
   exampleValues: {},
-  inferredTypes: [],
+  inferredTypes: {},
   matchPaths: {},
   pageDependsOnNode: {},
   queryDependsOnNode: {},
@@ -62,6 +62,11 @@ module.exports = ({ flags }) => {
       case `SET_INFERRED_TYPES`: {
         const printedTypes = action.payload
         state.inferredTypes = printedTypes
+        break
+      }
+      case `SET_INFERRED_TYPE`: {
+        const { typeName, printedType } = action.payload
+        state.inferredTypes[typeName] = printedType
         break
       }
       case `SET_QUERY_RESULT_HASH`: {

@@ -9,6 +9,12 @@ const { addInferredFields } = require(`./add-inferred-fields`)
 const getInferConfig = require(`./get-infer-config`)
 const { printType } = require(`graphql`)
 
+function eqSet(as, bs) {
+  if (as.size !== bs.size) return false
+  for (var a of as) if (!bs.has(a)) return false
+  return true
+}
+
 const addInferredType = ({
   schemaComposer,
   typeComposer,
@@ -36,10 +42,9 @@ const addInferredType = ({
     })
     const oldValue = exampleValueStore.get(typeName)
     if (!_.isEqual(exampleValue, oldValue)) {
-      // if (process.env.INCREMENTAL === `true`) {
-      //   console.log(`${typeName} exampleValue has changed`)
-      //   console.log(diff(oldValue, exampleValue))
-      // }
+      if (typeName === `SitePage`) {
+        console.log(`${typeName} exampleValue has changed`)
+      }
       exampleValueStore.save(typeName, exampleValue)
     }
   } else {
@@ -119,11 +124,19 @@ const addInferredTypes = ({
     report.panic(`Building schema failed`)
   }
 
-  const printedTypes = typeNames.map(typeName =>
-    printType(schemaComposer.getTC(typeName).getType())
-  )
-  if (!_.isEqual(printedTypes, exampleValueStore.getInferredTypes())) {
-    exampleValueStore.saveInferredTypes(printedTypes)
+  const storedTypes = exampleValueStore.getInferredTypes()
+  if (!eqSet(new Set(Object.keys(storedTypes)), new Set(typeNames))) {
+    // If the typeNames are in any way different, then resave the
+    // types from scratch to be safe
+    const printedTypes = typeNames.map(typeName =>
+      printType(schemaComposer.getTC(typeName).getType())
+    )
+    exampleValueStore.saveInferredTypes(typeNames, printedTypes)
+  } else {
+    // Otherwise, just resave the typeNames that have changed
+    typeNames.forEach(typeName =>
+      exampleValueStore.saveTypeIfChanged(schemaComposer, typeName)
+    )
   }
 
   return typeComposers
