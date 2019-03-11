@@ -1,5 +1,7 @@
 module.exports = (state = {}, action) => {
   switch (action.type) {
+    case `DELETE_CACHE`:
+      return {}
     case `CREATE_NODE`:
       state[action.payload.id] = true
       return state

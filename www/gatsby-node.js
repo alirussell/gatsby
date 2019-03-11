@@ -781,23 +781,31 @@ exports.onCreateNode = ({ node, actions, getNode, reporter }) => {
 exports.onCreatePage = ({ page, actions }) => {
   // add lists of featured items to Ecosystem page
   if (page.path === `/ecosystem/` || page.path === `/`) {
-    const { createPage, deletePage } = actions
-    const oldPage = Object.assign({}, page)
+    const { createPage } = actions
 
-    page.context.featuredStarters = ecosystemFeaturedItems.starters
-    page.context.featuredPlugins = ecosystemFeaturedItems.plugins
+    // TODO. We copy page and context so that actions.createPage can
+    // check newness. We should probably just return copies inside the
+    // pages reducer
+    const newPage = { ...page }
+    newPage.context = { ...page.context }
 
-    deletePage(oldPage)
-    createPage(page)
+    newPage.context.featuredStarters = ecosystemFeaturedItems.starters
+    newPage.context.featuredPlugins = ecosystemFeaturedItems.plugins
+
+    // TODO Double check deletePage is OK here
+    // deletePage(oldPage)
+    createPage(newPage)
   }
 
   if (page.path === `/plugins/`) {
     const { createPage, deletePage } = actions
     const oldPage = Object.assign({}, page)
+    // TODO refactor so it's the same as ecosystem
+    const newPage = { ...page }
+    newPage.context = { ...page.context }
 
     page.context.layout = `plugins`
-    deletePage(oldPage)
-    createPage(page)
+    createPage(newPage)
   }
 }
 
