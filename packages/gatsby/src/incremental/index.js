@@ -109,26 +109,11 @@ function saveQuery(components, component, query) {
 }
 
 async function runQueries({ bootstrapSpan }) {
-  let activity = report.activityTimer(`onPreExtractQueries`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await apiRunner(`onPreExtractQueries`, { parentSpan: activity.span })
-  activity.end()
-
-  // Update Schema for SitePage.
-  activity = report.activityTimer(`update schema`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
-  activity.end()
-
   // TODO clearInactiveComponents
   if (shouldRecompileQueries()) {
     console.log(`recompiling queries because schema changed`)
     // Extract queries
-    activity = report.activityTimer(`extract queries from components`, {
+    let activity = report.activityTimer(`extract queries from components`, {
       parentSpan: bootstrapSpan,
     })
     activity.start()
@@ -157,7 +142,7 @@ async function runQueries({ bootstrapSpan }) {
   })
 
   // Run queries
-  activity = report.activityTimer(`run graphql queries`, {
+  let activity = report.activityTimer(`run graphql queries`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
@@ -302,6 +287,21 @@ async function build({ parentSpan }) {
   }
 
   await createPages({ activity, bootstrapSpan, graphqlRunner })
+
+  activity = report.activityTimer(`onPreExtractQueries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await apiRunner(`onPreExtractQueries`, { parentSpan: activity.span })
+  activity.end()
+
+  // Update Schema for SitePage.
+  activity = report.activityTimer(`update schema`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
+  activity.end()
 
   await runQueries({ activity, bootstrapSpan })
 

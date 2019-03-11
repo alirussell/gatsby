@@ -16,6 +16,8 @@ const { graphql } = require(`graphql`)
 const { store, emitter, flags } = require(`../redux`)
 const loadPlugins = require(`./load-plugins`)
 const loadThemes = require(`./load-themes`)
+const { boundActionCreators } = require(`../redux/actions`)
+const { deletePage } = boundActionCreators
 const report = require(`gatsby-cli/lib/reporter`)
 const getConfigFile = require(`./get-config-file`)
 const tracer = require(`opentracing`).globalTracer()
@@ -157,10 +159,9 @@ async function initCache(context) {
   // plugins, the site's package.json, gatsby-config.js, and gatsby-node.js.
   // The last, gatsby-node.js, is important as many gatsby sites put important
   // logic in there e.g. generating slugs for custom pages.
-  const pluginsHash = getPluginConfigHash(context)
+  const pluginsHash = await getPluginConfigHash(context)
   let state = store.getState()
   const oldPluginsHash = state && state.status ? state.status.PLUGINS_HASH : ``
-
   // Check if anything has changed. If it has, delete the site's .cache
   // directory and tell reducers to empty themselves.
   //
@@ -365,12 +366,24 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
     parentSpan: activity.span,
   })
   activity.end()
+
+  const state = store.getState()
+  const touched = state.pagesTouched
+
+  for (const [path, page] of state.pages) {
+    if (!touched.has(path)) {
+      console.log(`found stale page`, page.path)
+      deletePage(page)
+    }
+  }
+
+  // TODO double check rerun schema stuff
+  
 }
 
 module.exports = async (args: BootstrapArgs) => {
   const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
   const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
-  const cacheDirectory = `${program.directory}/.cache`
 
   flags.matchPaths()
 
@@ -387,6 +400,8 @@ module.exports = async (args: BootstrapArgs) => {
     type: `SET_PROGRAM`,
     payload: program,
   })
+
+  const cacheDirectory = `${program.directory}/.cache`
 
   const bootstrapContext = {
     cacheDirectory,
@@ -417,7 +432,7 @@ module.exports = async (args: BootstrapArgs) => {
   activity.end()
 
   if (process.env.GATSBY_DB_NODES === `loki`) {
-    initLoki(bootstrapContext)
+    await initLoki(bootstrapContext)
   }
 
   // By now, our nodes database has been loaded, so ensure that we
