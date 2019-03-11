@@ -378,7 +378,6 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
   }
 
   // TODO double check rerun schema stuff
-  
 }
 
 module.exports = async (args: BootstrapArgs) => {

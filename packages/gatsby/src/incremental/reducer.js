@@ -23,7 +23,7 @@ const uniqPush = val => array => {
 
 module.exports = ({ flags }) => {
   function flagDirtyNodes(state, node) {
-    console.log(`flagging node`, node.internal.type, node.id)
+//    console.log(`flagging node`, node.internal.type, node.id)
     flags.nodeTypeCollection(node.internal.type)
     const queryId = state.queryDependsOnNode[node.id]
     if (queryId) {
@@ -36,7 +36,7 @@ module.exports = ({ flags }) => {
       internal: { ___gatsbyDependsOnPage: dependsOnPagePath },
     } = node
     if (dependsOnPagePath) {
-      console.log(`tracking node->page dep`, [dependsOnPagePath, node.id])
+//      console.log(`tracking node->page dep`, [dependsOnPagePath, node.id])
       _.set(state, [`pageDependsOnNode`, dependsOnPagePath], node.id)
     }
   }
@@ -87,7 +87,7 @@ module.exports = ({ flags }) => {
           state.matchPaths[page.matchPath] = page.path
           flags.matchPaths()
         }
-        console.log(`page changed. flagging queryJob`, page.path)
+//        console.log(`page changed. flagging queryJob`, page.path)
         flags.queryJob(page.path)
         break
       }
@@ -102,14 +102,14 @@ module.exports = ({ flags }) => {
       case `CREATE_COMPONENT_DEPENDENCY`: {
         const { nodeId, path, connection } = action.payload
         if (connection) {
-          console.log(`page->nodeType dep`, connection, path)
+//          console.log(`page->nodeType dep`, connection, path)
           _.update(
             state,
             [`queryDependsOnNodeCollection`, connection],
             uniqPush(path)
           )
         } else {
-          console.log(`page->node dep`, nodeId, path)
+//          console.log(`page->node dep`, nodeId, path)
           _.set(state, [`queryDependsOnNode`, nodeId], path)
         }
         break
