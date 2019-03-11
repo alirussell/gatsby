@@ -1,8 +1,10 @@
 const _ = require(`lodash`)
+const invariant = require(`invariant`)
 const {
   isSpecifiedScalarType,
   isIntrospectionType,
   defaultFieldResolver,
+  assertValidName,
 } = require(`graphql`)
 const apiRunner = require(`../utils/api-runner-node`)
 const report = require(`gatsby-cli/lib/reporter`)
@@ -140,7 +142,12 @@ const processTypeComposer = async ({
 const addTypes = ({ schemaComposer, types, parentSpan }) => {
   types.forEach(typeOrTypeDef => {
     if (typeof typeOrTypeDef === `string`) {
-      const addedTypes = schemaComposer.addTypeDefs(typeOrTypeDef)
+      let addedTypes
+      try {
+        addedTypes = schemaComposer.addTypeDefs(typeOrTypeDef)
+      } catch (error) {
+        reportParsingError(error)
+      }
       addedTypes.forEach(type =>
         processAddedType({ schemaComposer, type, parentSpan })
       )
@@ -161,6 +168,7 @@ const addTypes = ({ schemaComposer, types, parentSpan }) => {
 
 const processAddedType = ({ schemaComposer, type, parentSpan }) => {
   const typeName = schemaComposer.addAsComposer(type)
+  checkIsAllowedTypeName(typeName)
   const typeComposer = schemaComposer.get(typeName)
   if (
     typeComposer instanceof schemaComposer.InterfaceTypeComposer ||
@@ -171,6 +179,24 @@ const processAddedType = ({ schemaComposer, type, parentSpan }) => {
     }
   }
   schemaComposer.addSchemaMustHaveType(typeComposer)
+}
+
+const checkIsAllowedTypeName = name => {
+  invariant(
+    name !== `Node`,
+    `The GraphQL type \`Node\` is reserved for internal use.`
+  )
+  invariant(
+    !name.endsWith(`FilterInput`) && !name.endsWith(`SortInput`),
+    `GraphQL type names ending with "FilterInput" or "SortInput" are ` +
+      `reserved for internal use. Please rename \`${name}\`.`
+  )
+  invariant(
+    ![`Boolean`, `Date`, `Float`, `ID`, `Int`, `JSON`, `String`].includes(name),
+    `The GraphQL type \`${name}\` is reserved for internal use by ` +
+      `built-in scalar types.`
+  )
+  assertValidName(name)
 }
 
 const createTypeComposerFromGatsbyType = ({
@@ -321,7 +347,10 @@ const addCustomResolveFunctions = async ({ schemaComposer, parentSpan }) => {
               tc.extendField(fieldName, newConfig)
             } else if (fieldTypeName) {
               report.warn(
-                `\`createResolvers\` passed resolvers for field \`${typeName}.${fieldName}\` with type ${fieldTypeName}. Such field with type ${originalTypeName} already exists on the type. Use \`createTypes\` to override type fields.`
+                `\`createResolvers\` passed resolvers for field ` +
+                  `\`${typeName}.${fieldName}\` with type \`${fieldTypeName}\`. ` +
+                  `Such a field with type \`${originalTypeName}\` already exists ` +
+                  `on the type. Use \`createTypes\` to override type fields.`
               )
             }
           } else {
@@ -330,7 +359,9 @@ const addCustomResolveFunctions = async ({ schemaComposer, parentSpan }) => {
         })
       } else {
         report.warn(
-          `\`createResolvers\` passed resolvers for type \`${typeName}\` that doesn't exist in the schema. Use \`createTypes\` to add the type before adding resolvers.`
+          `\`createResolvers\` passed resolvers for type \`${typeName}\` that ` +
+            `doesn't exist in the schema. Use \`createTypes\` to add the type ` +
+            `before adding resolvers.`
         )
       }
     })
@@ -348,7 +379,6 @@ const addResolvers = ({ schemaComposer, typeComposer }) => {
 
   // TODO: We should have an abstraction for keeping and clearing
   // related TypeComposers and InputTypeComposers.
-  // NOTE: No need to clear the SortInput, that will be regenerated anyway.
   // Also see the comment on the skipped test in `rebuild-schema`.
   typeComposer.removeInputTypeComposer()
 
@@ -359,9 +389,6 @@ const addResolvers = ({ schemaComposer, typeComposer }) => {
   const filterInputTC = getFilterInput({
     schemaComposer,
     typeComposer,
-    filterInputComposer: schemaComposer.getOrCreateITC(
-      `${typeName}FilterInput`
-    ),
   })
   const paginationTC = getPagination({
     schemaComposer,
@@ -460,9 +487,33 @@ const addTypeToRootQuery = ({ schemaComposer, typeComposer }) => {
   const typeName = typeComposer.getTypeName()
   // not strictly correctly, result is `npmPackage` and `allNpmPackage` from type `NPMPackage`
   const queryName = _.camelCase(typeName)
-  const queryNamePlural = _.camelCase(`all` + typeName)
+  const queryNamePlural = _.camelCase(`all ${typeName}`)
   schemaComposer.Query.addFields({
     [queryName]: typeComposer.getResolver(`findOne`),
     [queryNamePlural]: typeComposer.getResolver(`findManyPaginated`),
   })
+}
+
+const reportParsingError = error => {
+  const { message, source, locations } = error
+
+  if (source && locations && locations.length) {
+    const report = require(`gatsby-cli/lib/reporter`)
+    const { codeFrameColumns } = require(`@babel/code-frame`)
+
+    const frame = codeFrameColumns(
+      source.body,
+      { start: locations[0] },
+      { linesAbove: 5, linesBelow: 5 }
+    )
+    report.panic(
+      `Encountered an error parsing the provided GraphQL type definitions:\n` +
+        message +
+        `\n\n` +
+        frame +
+        `\n`
+    )
+  } else {
+    throw error
+  }
 }

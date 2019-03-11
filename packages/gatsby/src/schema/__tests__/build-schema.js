@@ -272,6 +272,70 @@ describe(`Build schema`, () => {
 
     // TODO: Define what "handles being called multiple times mean"
     it.todo(`handles being called multiple times`)
+
+    it(`displays error message for reserved Node interface`, () => {
+      const typeDefs = [
+        `interface Node { foo: Boolean }`,
+        `type Node { foo: Boolean }`,
+        new GraphQLInterfaceType({ name: `Node`, fields: {} }),
+        buildInterfaceType({ name: `Node`, fields: {} }),
+      ]
+      return Promise.all(
+        typeDefs.map(def => {
+          store.dispatch({ type: `DELETE_CACHE` })
+          createTypes(def)
+          return expect(buildSchema()).rejects.toThrow(
+            `The GraphQL type \`Node\` is reserved for internal use.`
+          )
+        })
+      )
+    })
+
+    it(`displays error message for reserved type names`, () => {
+      const typeDefs = [
+        [`TestSortInput`, `type TestSortInput { foo: Boolean }`],
+        [
+          `TestFilterInput`,
+          `type TestFilterInput implements Node { foo: Boolean }`,
+        ],
+        [
+          `TestSortInput`,
+          new GraphQLObjectType({ name: `TestSortInput`, fields: {} }),
+        ],
+        [
+          `TestFilterInput`,
+          buildObjectType({ name: `TestFilterInput`, fields: {} }),
+        ],
+      ]
+      return Promise.all(
+        typeDefs.map(([name, def]) => {
+          store.dispatch({ type: `DELETE_CACHE` })
+          createTypes(def)
+          return expect(buildSchema()).rejects.toThrow(
+            `GraphQL type names ending with "FilterInput" or "SortInput" are ` +
+              `reserved for internal use. Please rename \`${name}\`.`
+          )
+        })
+      )
+    })
+
+    it(`displays error message for reserved type names`, () => {
+      const typeDefs = [
+        [`JSON`, `type JSON { foo: Boolean }`],
+        [`Date`, new GraphQLObjectType({ name: `Date`, fields: {} })],
+        [`Float`, buildObjectType({ name: `Float`, fields: {} })],
+      ]
+      return Promise.all(
+        typeDefs.map(([name, def]) => {
+          store.dispatch({ type: `DELETE_CACHE` })
+          createTypes(def)
+          return expect(buildSchema()).rejects.toThrow(
+            `The GraphQL type \`${name}\` is reserved for internal use by ` +
+              `built-in scalar types.`
+          )
+        })
+      )
+    })
   })
 
   describe(`createResolvers`, () => {
