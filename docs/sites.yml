@@ -1188,12 +1188,6 @@
   categories:
     - Entertainment
     - News
-- title: Cool Hunting
-  main_url: "http://www.coolhunting.com/"
-  url: "http://www.coolhunting.com/"
-  featured: false
-  categories:
-    - Magazine
 - title: Dovetail
   main_url: "https://dovetailapp.com/"
   url: "https://dovetailapp.com/"
@@ -4769,7 +4763,6 @@
   built_by: Josh Glazer
   built_by_url: https://linkedin.com/in/joshglazer/
   featured: false
-- title: A blog with great seo that using gatsby-source-wordpress to fetch posts from backend
 - title: Hesam Kaveh's blog
   description: >
     A blog with great seo that using gatsby-source-wordpress to fetch posts from backend
