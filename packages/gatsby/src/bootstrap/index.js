@@ -111,22 +111,24 @@ async function initLoki({ bootstrapSpan, cacheDirectory }) {
 }
 
 async function deleteHtmlCss({ bootstrapSpan }) {
-  // Delete html and css files from the public directory as we don't want
+  // During builds, delete html and css files from the public directory as we don't want
   // deleted pages and styles from previous builds to stick around.
-  const activity = report.activityTimer(
-    `delete html and css files from previous builds`,
-    {
-      parentSpan: bootstrapSpan,
-    }
-  )
-  activity.start()
-  await del([
-    `public/*.{html,css}`,
-    `public/**/*.{html,css}`,
-    `!public/static`,
-    `!public/static/**/*.{html,css}`,
-  ])
-  activity.end()
+  if (process.env.NODE_ENV === `production`) {
+    const activity = report.activityTimer(
+      `delete html and css files from previous builds`,
+      {
+        parentSpan: bootstrapSpan,
+      }
+    )
+    activity.start()
+    await del([
+      `public/*.{html,css}`,
+      `public/**/*.{html,css}`,
+      `!public/static`,
+      `!public/static/**/*.{html,css}`,
+    ])
+    activity.end()
+  }
 }
 
 async function getPluginConfigHash({ program, flattenedPlugins }) {
