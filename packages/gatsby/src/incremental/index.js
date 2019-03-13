@@ -286,6 +286,10 @@ async function build({ parentSpan }) {
     )
   }
 
+  // Different
+  const existingPages = _.clone(store.getState().pages)
+  // end Different
+
   await createPages({ activity, bootstrapSpan, graphqlRunner })
 
   activity = report.activityTimer(`onPreExtractQueries`, {
@@ -302,6 +306,25 @@ async function build({ parentSpan }) {
   activity.start()
   await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
   activity.end()
+
+  // Different
+  const eqPages = (page1, page2) => {
+    const changeKeys = [`component`, `context`, `matchPath`]
+    return (
+      page1 &&
+      page2 &&
+      _.isEqual(_.pick(page1, changeKeys), _.pick(page2, changeKeys))
+    )
+  }
+
+  const flaggedPaths = flags.queryJobs
+  flaggedPaths.forEach(path => {
+    if (eqPages(existingPages.get(path), store.getState().pages.get(path))) {
+      console.log(`unflagging query job ${path}`)
+      flags.queryJobs.delete(path)
+    }
+  })
+  // End different
 
   await runQueries({ activity, bootstrapSpan })
 

@@ -419,6 +419,24 @@ actions.deleteNode = (options: any, plugin: Plugin, args: any) => {
 }
 
 /**
+ * "Touch" a page. Tells Gatsby a page still exists and shouldn't
+ * be garbage collected.
+ * @param {Object} $0
+ * @param {string} $0.path The path of a page
+ * @example
+ * touchPage({ path: `/a/page/path` })
+ */
+actions.touchPage = (options: any, plugin?: Plugin) => {
+  let path = _.get(options, `path`)
+
+  return {
+    type: `TOUCH_PAGE`,
+    plugin,
+    payload: { path },
+  }
+}
+
+/**
  * Batch delete nodes
  * @param {Array} nodes an array of node ids
  * @example

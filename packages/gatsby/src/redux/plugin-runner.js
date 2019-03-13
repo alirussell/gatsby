@@ -1,5 +1,6 @@
 // Invoke plugins for certain actions.
 
+const _ = require(`lodash`)
 const { emitter } = require(`./index`)
 const { getNode } = require(`../db/nodes`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
@@ -16,7 +17,7 @@ emitter.on(`CREATE_NODE`, action => {
 })
 
 emitter.on(`CREATE_PAGE`, action => {
-  const page = action.payload
+  const page = _.cloneDeep(action.payload)
   apiRunnerNode(
     `onCreatePage`,
     { page, traceId: action.traceId, parentSpan: action.parentSpan },
