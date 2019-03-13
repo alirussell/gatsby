@@ -141,6 +141,9 @@ async function runQueries({ bootstrapSpan }) {
     })
   })
 
+  // All created/changed pages need to be rerun
+  flags.pages.forEach(flags.queryJob)
+
   // Run queries
   let activity = report.activityTimer(`run graphql queries`, {
     parentSpan: bootstrapSpan,
@@ -317,11 +320,11 @@ async function build({ parentSpan }) {
     )
   }
 
-  const flaggedPaths = flags.queryJobs
+  const flaggedPaths = flags.pages
   flaggedPaths.forEach(path => {
     if (eqPages(existingPages.get(path), store.getState().pages.get(path))) {
-      console.log(`unflagging query job ${path}`)
-      flags.queryJobs.delete(path)
+      console.log(`unflagging page ${path}`)
+      flags.pages.delete(path)
     }
   })
   // End different

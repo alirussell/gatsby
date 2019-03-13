@@ -7,6 +7,7 @@ class Flags {
     this.staticQueryChanged = false
     this.redirectsChanged = false
     this.matchPathsChanged = false
+    this.pages = new Set()
     this.pageDatas = new Set()
     this.renderPageDirty = false
   }
@@ -30,6 +31,9 @@ class Flags {
   }
   matchPaths() {
     this.matchPathsChanged = true
+  }
+  page(path) {
+    this.pages.add(path)
   }
   pageData(path) {
     this.pageDatas.add(path)
