@@ -24,6 +24,7 @@ module.exports = {
       options: {
         name: `docs`,
         path: `${__dirname}/../docs/`,
+        omitFields: [`accessTime`, `atime`, `atimeMs`],
       },
     },
     {
@@ -31,6 +32,7 @@ module.exports = {
       options: {
         name: `packages`,
         path: `${__dirname}/../packages/`,
+        omitFields: [`accessTime`, `atime`, `atimeMs`],
       },
     },
     {
@@ -38,6 +40,7 @@ module.exports = {
       options: {
         name: `ecosystem`,
         path: `${__dirname}/src/data/ecosystem/`,
+        omitFields: [`accessTime`, `atime`, `atimeMs`],
       },
     },
     {
@@ -52,6 +55,7 @@ module.exports = {
       resolve: `gatsby-source-filesystem`,
       options: {
         path: `${__dirname}/src/data/diagram`,
+        omitFields: [`accessTime`, `atime`, `atimeMs`],
       },
     },
     {
