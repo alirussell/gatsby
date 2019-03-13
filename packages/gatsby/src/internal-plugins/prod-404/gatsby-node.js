@@ -1,6 +1,5 @@
 exports.createPages = ({ createContentDigest, actions, store }) => {
   const page404 = store.getState().pages.get(`/404.html`)
-  console.log(`found?`, page404)
   if (page404) {
     actions.touchPage(page404)
   }
