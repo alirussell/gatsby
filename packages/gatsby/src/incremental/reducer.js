@@ -93,7 +93,7 @@ module.exports = ({ flags }) => {
           flags.matchPaths()
         }
         //        console.log(`page changed. flagging queryJob`, page.path)
-        flags.queryJob(page.path)
+        flags.page(page.path)
         break
       }
       case `DELETE_PAGE`: {
