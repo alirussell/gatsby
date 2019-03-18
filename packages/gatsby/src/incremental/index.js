@@ -13,6 +13,7 @@ const { deletePage } = boundActionCreators
 const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
 const buildProductionBundle = require(`../commands/build-javascript`)
 const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
+const pageData = require(`../utils/page-data`)
 const buildHtml = require(`../commands/build-html`)
 const {
   runQueriesForPathnames,
@@ -136,13 +137,14 @@ async function runQueries({ bootstrapSpan }) {
   flags.nodeTypeCollections.forEach(type => {
     const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
     queries.forEach(queryId => {
-      console.log(`flagging ${type} type query`)
       flags.queryJob(queryId)
     })
   })
 
   // All created/changed pages need to be rerun
-  flags.pages.forEach(flags.queryJob)
+  flags.pages.forEach(path => {
+    flags.queryJob(path)
+  })
 
   // Run queries
   let activity = report.activityTimer(`run graphql queries`, {
@@ -225,6 +227,8 @@ async function build({ parentSpan }) {
     bootstrapSpan,
     program,
   }
+
+  pageData.initQueue({ program, store, flags })
 
   // Same as Full build from here
 
@@ -323,10 +327,12 @@ async function build({ parentSpan }) {
   const flaggedPaths = flags.pages
   flaggedPaths.forEach(path => {
     if (eqPages(existingPages.get(path), store.getState().pages.get(path))) {
-      console.log(`unflagging page ${path}`)
       flags.pages.delete(path)
     }
   })
+  for (const path of flags.pages) {
+    pageData.getQueue().push({ path })
+  }
   // End different
 
   await runQueries({ activity, bootstrapSpan })

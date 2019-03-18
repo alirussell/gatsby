@@ -1,6 +1,7 @@
 const Queue = require(`better-queue`)
 
 const queryRunner = require(`./query-runner`)
+const pageData = require(`../../utils/page-data`)
 const { store, emitter } = require(`../../redux`)
 const websocketManager = require(`../../utils/websocket-manager`)
 
@@ -46,7 +47,11 @@ const queue = new Queue((plObj, callback) => {
   const state = store.getState()
   processing.add(plObj.id)
 
-  return queryRunner(plObj, state.components[plObj.component])
+  return queryRunner(
+    pageData.getQueue(),
+    plObj,
+    state.components[plObj.component]
+  )
     .catch(e => console.log(`Error running queryRunner`, e))
     .then(
       result => {

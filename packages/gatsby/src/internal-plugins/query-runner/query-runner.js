@@ -7,7 +7,7 @@ const report = require(`gatsby-cli/lib/reporter`)
 const websocketManager = require(`../../utils/websocket-manager`)
 
 const path = require(`path`)
-const { store, flags } = require(`../../redux`)
+const { store } = require(`../../redux`)
 const withResolverContext = require(`../../schema/context`)
 const { formatErrorDetails } = require(`./utils`)
 const debug = require(`debug`)(`gatsby:query-runner`)
@@ -23,7 +23,11 @@ type QueryJob = {
 }
 
 // Run query
-module.exports = async (queryJob: QueryJob, component: Any) => {
+module.exports = async (
+  pageDataQueue: any,
+  queryJob: QueryJob,
+  component: Any
+) => {
   const { schema, program } = store.getState()
 
   const graphql = (query, context) =>
@@ -122,29 +126,13 @@ ${formatErrorDetails(errorDetails)}`)
     },
   })
 
-  // TODO put all query results in queue and write concurrently so
-  // we're not waiting on disk i/o all the time
-
   if (queryJob.isPage) {
-    const state = store.getState()
-    const pagePath = queryJob.id
-    const publicDir = path.join(program.directory, `public`)
-    const fixedPagePath = pagePath === `/` ? `index` : pagePath
-    const page = state.pages.get(pagePath)
-    invariant(page, `queryJob path [${pagePath}] not found`)
-    const pageDataPath = path.join(
-      publicDir,
-      `page-data`,
-      fixedPagePath,
-      `page-data.json`
-    )
-    const body = {
-      componentChunkName: page.componentChunkName,
+    const pageData = {
       path: queryJob.id,
-      ...result,
+      result,
     }
-    flags.pageData(pagePath)
-    await fs.outputFile(pageDataPath, JSON.stringify(body))
+    invariant(pageDataQueue, `page-data queue hasn't been init'd yet`)
+    pageDataQueue.push(pageData)
 
     // It's a StaticQuery
   } else {

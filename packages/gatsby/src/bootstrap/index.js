@@ -23,7 +23,7 @@ const getConfigFile = require(`./get-config-file`)
 const tracer = require(`opentracing`).globalTracer()
 const preferDefault = require(`./prefer-default`)
 const nodeTracking = require(`../db/node-tracking`)
-const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
+const pageData = require(`../utils/page-data`)
 const withResolverContext = require(`../schema/context`)
 require(`../db`).startAutosave()
 
@@ -410,6 +410,8 @@ module.exports = async (args: BootstrapArgs) => {
     program,
   }
 
+  pageData.initQueue({ program, store, flags })
+
   const config = await initConfig(bootstrapContext)
 
   // Same as incremental from here
@@ -520,6 +522,10 @@ module.exports = async (args: BootstrapArgs) => {
   // Start the createPages hot reloader.
   if (process.env.NODE_ENV !== `production`) {
     require(`./page-hot-reloader`)(graphqlRunner)
+  }
+
+  for (const path of store.getState().pages) {
+    pageData.getQueue().push({ path })
   }
 
   // Run queries
