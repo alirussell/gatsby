@@ -79,12 +79,6 @@ const findPath = rawPathname => {
   return trimmedPathname
 }
 
-// const createJsonURL = jsonName => `${__PATH_PREFIX__}/static/d/${jsonName}.json`
-const createComponentUrls = componentChunkName =>
-  window.___chunkMapping[componentChunkName].map(
-    chunk => __PATH_PREFIX__ + chunk
-  )
-
 const runFetchResource = (resourceName, resourceFunction) => {
   // Download the resource
   hasFetched[resourceName] = true
@@ -166,6 +160,12 @@ const fetchPageData = path => {
 
 const prefetchPageData = path => prefetchHelper(makePageDataUrl(path))
 
+// const createJsonURL = jsonName => `${__PATH_PREFIX__}/static/d/${jsonName}.json`
+const createComponentUrls = componentChunkName =>
+  window.___chunkMapping[componentChunkName].map(
+    chunk => __PATH_PREFIX__ + chunk
+  )
+
 const prefetchComponent = chunkName =>
   Promise.all(createComponentUrls(chunkName).map(prefetchHelper))
 
@@ -216,8 +216,7 @@ const onPostPrefetchPathname = pathname => {
  * potential reload
  * @param {string} path Path to a page
  */
-const shouldFallbackTo404Resources = path =>
-  inInitialRender && path !== `/404.html`
+const shouldFallbackTo404Resources = path => path !== `/404.html`
 
 // Note we're not actively using the path data atm. There
 // could be future optimizations however around trying to ensure
@@ -288,10 +287,15 @@ const queue = {
 
     // Prefetch resources.
     if (process.env.NODE_ENV === `production`) {
-      prefetchPageData(realPath).then(() => {
-        // Tell plugins the path has been successfully prefetched
-        onPostPrefetchPathname(realPath)
-      })
+      prefetchPageData(realPath)
+        .then(() => {
+          console.log(`prefetch page-data finished`)
+          return fetchPageData(realPath)
+        })
+        .then(pageData => prefetchComponent(pageData.componentChunkName))
+        .then(() => {
+          onPostPrefetchPathname(realPath)
+        })
     }
 
     return true
