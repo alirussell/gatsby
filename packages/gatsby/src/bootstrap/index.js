@@ -55,40 +55,59 @@ type BootstrapArgs = {
   parentSpan: Object,
 }
 
-async function initConfig({ bootstrapSpan, program }) {
-  // Try opening the site's gatsby-config.js file.
-  let activity = report.activityTimer(`open and validate gatsby-configs`, {
-    parentSpan: bootstrapSpan,
+function getProgram(args) {
+  const directory = slash(args.directory)
+  const program = {
+    ...args,
+    browserslist: getBrowserslist(directory),
+    // Fix program directory path for windows env.
+    directory,
+  }
+  store.dispatch({
+    type: `SET_PROGRAM`,
+    payload: program,
   })
-  activity.start()
-  let config = await preferDefault(
-    getConfigFile(program.directory, `gatsby-config`)
-  )
+  return program
+}
 
-  // theme gatsby configs can be functions or objects
-  if (config && config.__experimentalThemes) {
-    const themes = await loadThemes(config)
-    config = themes.config
+async function initConfig({ bootstrapSpan, program }) {
+  if (!_.isEmpty(store.getState().config)) {
+    return store.getState().config
+  } else {
+    // Try opening the site's gatsby-config.js file.
+    let activity = report.activityTimer(`open and validate gatsby-configs`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    let config = await preferDefault(
+      getConfigFile(program.directory, `gatsby-config`)
+    )
+
+    // theme gatsby configs can be functions or objects
+    if (config && config.__experimentalThemes) {
+      const themes = await loadThemes(config)
+      config = themes.config
+
+      store.dispatch({
+        type: `SET_RESOLVED_THEMES`,
+        payload: themes.themes,
+      })
+    }
+
+    if (config && config.polyfill) {
+      report.warn(
+        `Support for custom Promise polyfills has been removed in Gatsby v2. We only support Babel 7's new automatic polyfilling behavior.`
+      )
+    }
 
     store.dispatch({
-      type: `SET_RESOLVED_THEMES`,
-      payload: themes.themes,
+      type: `SET_SITE_CONFIG`,
+      payload: config,
     })
+
+    activity.end()
+    return config
   }
-
-  if (config && config.polyfill) {
-    report.warn(
-      `Support for custom Promise polyfills has been removed in Gatsby v2. We only support Babel 7's new automatic polyfilling behavior.`
-    )
-  }
-
-  store.dispatch({
-    type: `SET_SITE_CONFIG`,
-    payload: config,
-  })
-
-  activity.end()
-  return config
 }
 
 async function initLoki({ bootstrapSpan, cacheDirectory }) {
@@ -383,25 +402,13 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
 }
 
 module.exports = async (args: BootstrapArgs) => {
-  const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
-  const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
-
   flags.matchPaths()
 
-  const directory = slash(args.directory)
+  // Same as incremental from here
 
-  const program = {
-    ...args,
-    browserslist: getBrowserslist(directory),
-    // Fix program directory path for windows env.
-    directory,
-  }
-
-  store.dispatch({
-    type: `SET_PROGRAM`,
-    payload: program,
-  })
-
+  const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
+  const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
+  const program = getProgram(args)
   const cacheDirectory = `${program.directory}/.cache`
 
   const bootstrapContext = {
@@ -410,11 +417,9 @@ module.exports = async (args: BootstrapArgs) => {
     program,
   }
 
-  pageData.initQueue({ program, store, flags })
-
   const config = await initConfig(bootstrapContext)
 
-  // Same as incremental from here
+  pageData.initQueue({ program, store, flags })
 
   // Start plugin runner which listens to the store
   // and invokes Gatsby API based on actions.

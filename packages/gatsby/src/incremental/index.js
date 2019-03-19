@@ -1,28 +1,112 @@
+/* @flow */
+
 const _ = require(`lodash`)
+const slash = require(`slash`)
+
 const path = require(`path`)
-const tracer = require(`opentracing`).globalTracer()
-const report = require(`gatsby-cli/lib/reporter`)
-const loadPlugins = require(`../bootstrap/load-plugins`)
-const apiRunner = require(`../utils/api-runner-node`)
-const { store, emitter, flags } = require(`../redux`)
 const convertHrtime = require(`convert-hrtime`)
-const nodeTracking = require(`../db/node-tracking`)
+const Promise = require(`bluebird`)
+
+const apiRunner = require(`../utils/api-runner-node`)
+const getBrowserslist = require(`../utils/browserslist`)
 const { graphql } = require(`graphql`)
+const { store, emitter, flags } = require(`../redux`)
+const loadPlugins = require(`../bootstrap/load-plugins`)
+const loadThemes = require(`../bootstrap/load-themes`)
 const { boundActionCreators } = require(`../redux/actions`)
 const { deletePage } = boundActionCreators
-const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
-const buildProductionBundle = require(`../commands/build-javascript`)
-const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
+const report = require(`gatsby-cli/lib/reporter`)
+const getConfigFile = require(`../bootstrap/get-config-file`)
+const tracer = require(`opentracing`).globalTracer()
+const preferDefault = require(`../bootstrap/prefer-default`)
+
+const nodeTracking = require(`../db/node-tracking`)
 const pageData = require(`../utils/page-data`)
+const withResolverContext = require(`../schema/context`)
+require(`../db`).startAutosave()
+
+const buildProductionBundle = require(`../commands/build-javascript`)
 const buildHtml = require(`../commands/build-html`)
+
+// Show stack trace on unhandled promises.
+process.on(`unhandledRejection`, (reason, p) => {
+  report.panic(reason)
+})
+
 const {
   runQueriesForPathnames,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
+const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
+const pagesWriter = require(`../internal-plugins/query-runner/pages-writer`)
+const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writer`)
+
 const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`)
   .default
-const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writer`)
-const withResolverContext = require(`../schema/context`)
-require(`../db`).startAutosave()
+
+type BootstrapArgs = {
+  directory: string,
+  prefixPaths?: boolean,
+  parentSpan: Object,
+}
+
+function getProgram(args) {
+  if (store.getState().program) {
+    return store.getState().program
+  } else {
+    const directory = slash(args.directory)
+    const program = {
+      ...args,
+      browserslist: getBrowserslist(directory),
+      // Fix program directory path for windows env.
+      directory,
+    }
+    store.dispatch({
+      type: `SET_PROGRAM`,
+      payload: program,
+    })
+    return program
+  }
+}
+
+async function initConfig({ bootstrapSpan, program }) {
+  if (store.getState().config) {
+    return store.getState().config
+  } else {
+    // Try opening the site's gatsby-config.js file.
+    let activity = report.activityTimer(`open and validate gatsby-configs`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    let config = await preferDefault(
+      getConfigFile(program.directory, `gatsby-config`)
+    )
+
+    // theme gatsby configs can be functions or objects
+    if (config && config.__experimentalThemes) {
+      const themes = await loadThemes(config)
+      config = themes.config
+
+      store.dispatch({
+        type: `SET_RESOLVED_THEMES`,
+        payload: themes.themes,
+      })
+    }
+
+    if (config && config.polyfill) {
+      report.warn(
+        `Support for custom Promise polyfills has been removed in Gatsby v2. We only support Babel 7's new automatic polyfilling behavior.`
+      )
+    }
+
+    store.dispatch({
+      type: `SET_SITE_CONFIG`,
+      payload: config,
+    })
+
+    activity.end()
+    return config
+  }
+}
 
 async function initLoki({ bootstrapSpan, cacheDirectory }) {
   const activity = report.activityTimer(`start nodes db`, {
@@ -210,35 +294,34 @@ async function buildProductionApp({ bootstrapSpan, program }) {
   activity.end()
 }
 
-async function build({ parentSpan }) {
+async function build(args: BootstrapArgs) {
   console.log(`INCREMENTAL`)
-  const spanArgs = parentSpan ? { childOf: parentSpan } : {}
+
+  // Same as Full build from here
+
+  const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
   const bootstrapSpan = tracer.startSpan(`bootstrap`, spanArgs)
-  const config = store.getState().config
-  const { directory } = config
-  const program = store.getState().program
-  const cacheDirectory = `${directory}/.cache`
-  let activity
-  // console.log(store.getState().depGraph)
+  const program = getProgram(args)
+  const cacheDirectory = `${program.directory}/.cache`
 
   const bootstrapContext = {
     cacheDirectory,
-    activity,
     bootstrapSpan,
     program,
   }
 
-  pageData.initQueue({ program, store, flags })
+  const config = await initConfig(bootstrapContext)
 
-  // Same as Full build from here
+  pageData.initQueue({ program, store, flags })
 
   // Start plugin runner which listens to the store
   // and invokes Gatsby API based on actions.
   require(`../redux/plugin-runner`)
 
-  activity = report.activityTimer(`load plugins`)
+  let activity = report.activityTimer(`load plugins`)
   activity.start()
-  await loadPlugins(config)
+  const flattenedPlugins = await loadPlugins(config)
+  bootstrapContext.flattenedPlugins = flattenedPlugins
   activity.end()
 
   // onPreInit
