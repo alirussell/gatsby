@@ -7,12 +7,10 @@ import matchPaths from "./match-paths.json"
 const preferDefault = m => (m && m.default) || m
 
 let devGetPageData
-let inInitialRender = true
-let hasFetched = Object.create(null)
 let syncRequires = {}
 let asyncRequires = {}
-let jsonDataPaths = {}
 let fetchHistory = []
+
 // /**
 //  * Indicate if pages manifest is loaded
 //  *  - in production it is split to separate "pages-manifest" chunk that need to be lazy loaded,
@@ -25,7 +23,7 @@ const MAX_HISTORY = 5
 
 const fetchedPageData = {}
 const pageDatas = {}
-const jsonPromiseStore = {}
+const fetchPromiseStore = {}
 
 if (process.env.NODE_ENV !== `production`) {
   devGetPageData = require(`./socketIo`).getPageData
@@ -79,59 +77,55 @@ const findPath = rawPathname => {
   return trimmedPathname
 }
 
-const runFetchResource = (resourceName, resourceFunction) => {
-  // Download the resource
-  hasFetched[resourceName] = true
-  return new Promise(resolve => {
-    const fetchPromise = resourceFunction()
-    let failed = false
-    return fetchPromise
-      .catch(() => {
-        failed = true
-      })
-      .then(resource => {
-        fetchHistory.push({
-          resource: resourceName,
-          succeeded: !failed,
-        })
-
-        fetchHistory = fetchHistory.slice(-MAX_HISTORY)
-
-        resolve(resource)
-      })
-  })
+const wrapHistory = fetchPromise => {
+  let succeeded = false
+  return fetchPromise
+    .then(resource => {
+      succeeded = true
+      return resource
+    })
+    .finally(() => {
+      fetchHistory.push({ succeeded })
+      fetchHistory = fetchHistory.slice(-MAX_HISTORY)
+    })
 }
 
-const fetchResource = (resourceName, url = jsonDataPaths[resourceName]) => {
-  // Find resource
-  let resourceFunction
-  if (resourceName in jsonPromiseStore) {
-    resourceFunction = () => jsonPromiseStore[resourceName]
+const cachedFetch = (resourceName, fetchFn) => {
+  if (resourceName in fetchPromiseStore) {
+    return fetchPromiseStore[resourceName]
   } else {
-    resourceFunction = () => {
-      const fetchPromise = new Promise((resolve, reject) => {
-        const req = new XMLHttpRequest()
-        req.open(`GET`, url, true)
-        req.withCredentials = true
-        req.onreadystatechange = () => {
-          if (req.readyState == 4) {
-            if (req.status === 200) {
-              resolve(JSON.parse(req.responseText))
-            } else {
-              delete jsonPromiseStore[resourceName]
-              reject()
-            }
-          }
-        }
-        req.send(null)
-      })
-      jsonPromiseStore[resourceName] = fetchPromise
-      return fetchPromise
-    }
+    const promise = wrapHistory(fetchFn(resourceName))
+    fetchPromiseStore[resourceName] = promise
+    return promise.catch(err => {
+      delete fetchPromiseStore[resourceName]
+      return err
+    })
   }
-
-  return runFetchResource(resourceName, resourceFunction)
 }
+
+const fetchUrl = url =>
+  new Promise((resolve, reject) => {
+    const req = new XMLHttpRequest()
+    req.open(`GET`, url, true)
+    req.withCredentials = true
+    req.onreadystatechange = () => {
+      if (req.readyState == 4) {
+        if (req.status === 200) {
+          resolve(JSON.parse(req.responseText))
+        } else {
+          reject()
+        }
+      }
+    }
+    req.send(null)
+  })
+
+const createComponentUrls = componentChunkName =>
+  window.___chunkMapping[componentChunkName].map(
+    chunk => __PATH_PREFIX__ + chunk
+  )
+
+const fetchComponent = chunkName => asyncRequires.components[chunkName]()
 
 const stripSurroundingSlashes = s => {
   s = s[0] === `/` ? s.slice(1) : s
@@ -146,7 +140,7 @@ const makePageDataUrl = path => {
 
 const fetchPageData = path => {
   const url = makePageDataUrl(path)
-  return fetchResource(path, url).then((pageData, err) => {
+  return cachedFetch(url, fetchUrl).then((pageData, err) => {
     fetchedPageData[path] = true
     if (pageData) {
       pageDatas[path] = pageData
@@ -157,17 +151,6 @@ const fetchPageData = path => {
     }
   })
 }
-
-const prefetchPageData = path => prefetchHelper(makePageDataUrl(path))
-
-// const createJsonURL = jsonName => `${__PATH_PREFIX__}/static/d/${jsonName}.json`
-const createComponentUrls = componentChunkName =>
-  window.___chunkMapping[componentChunkName].map(
-    chunk => __PATH_PREFIX__ + chunk
-  )
-
-const prefetchComponent = chunkName =>
-  Promise.all(createComponentUrls(chunkName).map(prefetchHelper))
 
 const appearsOnLine = () => {
   const isOnLine = navigator.onLine
@@ -200,10 +183,10 @@ const onPrefetchPathname = pathname => {
   }
 }
 
-const onPostPrefetchPathname = pathname => {
-  if (!prefetchCompleted[pathname]) {
-    apiRunner(`onPostPrefetchPathname`, { pathname })
-    prefetchCompleted[pathname] = true
+const onPostPrefetch = url => {
+  if (!prefetchCompleted[url]) {
+    apiRunner(`onPostPrefetch`, { url })
+    prefetchCompleted[url] = true
   }
 }
 
@@ -287,43 +270,33 @@ const queue = {
 
     // Prefetch resources.
     if (process.env.NODE_ENV === `production`) {
-      prefetchPageData(realPath)
+      const pageDataUrl = makePageDataUrl(realPath)
+      prefetchHelper(pageDataUrl)
         .then(() => {
           console.log(`prefetch page-data finished`)
-          return fetchPageData(realPath)
+          // This was just prefetched, so will return a response from
+          // the cache instead of making another request to the server
+          return fetchUrl(pageDataUrl)
         })
-        .then(pageData => prefetchComponent(pageData.componentChunkName))
-        .then(() => {
-          onPostPrefetchPathname(realPath)
+        .then(pageData => {
+          // Tell plugins the path has been successfully prefetched
+          const chunkName = pageData.componentChunkName
+          const componentUrls = createComponentUrls(chunkName)
+          return Promise.all(componentUrls.map(prefetchHelper)).then(() => {
+            const resourceUrls = [pageDataUrl].concat(componentUrls)
+            onPostPrefetch({
+              path: rawPath,
+              resourceUrls,
+            })
+          })
         })
     }
 
     return true
   },
 
-  getResourceURLsForPathname: realPath => {
-    if (realPath) {
-      return [makePageDataUrl(realPath)]
-    } else {
-      return null
-    }
-  },
-
   // TODO
   // getPage: pathname => findPage(pathname),
-
-  // TODO doesn't make sense. No such thing as a jsonURL anymore
-  // getResourceURLsForPathname: path => {
-  //   const page = findPage(path)
-  //   if (page) {
-  //     return [
-  //       ...createComponentUrls(page.componentChunkName),
-  //       createJsonURL(jsonDataPaths[page.jsonName]),
-  //     ]
-  //   } else {
-  //     return null
-  //   }
-  // },
 
   getResourcesForPathnameSync: rawPath => {
     const realPath = findPath(rawPath)
@@ -409,14 +382,13 @@ const queue = {
             pageResources,
           })
           // Tell plugins the path has been successfully prefetched
-          onPostPrefetchPathname(realPath)
+          // TODO onPostPrefetch(makePageDataUrl(realPath))
 
           resolve(pageResources)
         })
       } else {
         console.log(`getting component`)
-        const fetchFn = asyncRequires.components[componentChunkName]
-        runFetchResource(componentChunkName, fetchFn)
+        cachedFetch(componentChunkName, fetchComponent)
           .then(preferDefault)
           .then(component => {
             console.log(`got component`)
@@ -456,7 +428,13 @@ const queue = {
             })
 
             // Tell plugins the path has been successfully prefetched
-            onPostPrefetchPathname(realPath)
+            const pageDataUrl = makePageDataUrl(realPath)
+            const componentUrls = createComponentUrls(componentChunkName)
+            const resourceUrls = [pageDataUrl].concat(componentUrls)
+            onPostPrefetch({
+              path: rawPath,
+              resourceUrls,
+            })
           })
       }
     }),
@@ -469,7 +447,6 @@ export const setApiRunnerForLoader = runner => {
 
 export const publicLoader = {
   getResourcesForPathname: queue.getResourcesForPathname,
-  // getResourceURLsForPathname: queue.getResourceURLsForPathname,
   getResourcesForPathnameSync: queue.getResourcesForPathnameSync,
 }
 
