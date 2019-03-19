@@ -55,11 +55,8 @@ const findPath = rawPathname => {
   }
 
   let foundPath
-  console.log(matchPaths)
   Object.keys(matchPaths).some(matchPath => {
     const path = matchPaths[matchPath]
-    console.log(matchPath, path)
-    console.log(match)
     if (match(matchPath, trimmedPathname)) {
       foundPath = path
       pathCache[trimmedPathname] = foundPath
@@ -299,8 +296,10 @@ const queue = {
   // getPage: pathname => findPage(pathname),
 
   getResourcesForPathnameSync: rawPath => {
+    console.log(`getResourcesForPathnameSync: [${rawPath}]`)
     const realPath = findPath(rawPath)
-    if (realPath) {
+    console.log(`getResourcesForPathnameSync: realPath: [${realPath}]`)
+    if (realPath in pathScriptsCache) {
       return pathScriptsCache[realPath]
     } else if (shouldFallbackTo404Resources(realPath)) {
       return queue.getResourcesForPathnameSync(`/404.html`)
@@ -311,6 +310,7 @@ const queue = {
 
   getResourcesForPathname: rawPath =>
     new Promise((resolve, reject) => {
+      console.log(`getResourcesForPathname: [${rawPath}]`)
       // Production code path
       if (failedPaths[rawPath]) {
         handleResourceLoadError(
@@ -321,10 +321,11 @@ const queue = {
         return
       }
 
-      console.log(`before find path`)
       const realPath = findPath(rawPath)
+      console.log(`real path is [${realPath}]`)
 
       if (!fetchedPageData[realPath]) {
+        console.log(`Requesting page data for [${realPath}] for first time`)
         fetchPageData(realPath).then(() =>
           resolve(queue.getResourcesForPathname(rawPath))
         )
@@ -335,7 +336,7 @@ const queue = {
 
       if (!pageData) {
         if (shouldFallbackTo404Resources(realPath)) {
-          console.log(`A page wasn't found for "${rawPath}"`)
+          console.log(`No page found: [${rawPath}]`)
 
           // Preload the custom 404 page
           resolve(queue.getResourcesForPathname(`/404.html`))
@@ -387,7 +388,7 @@ const queue = {
           resolve(pageResources)
         })
       } else {
-        console.log(`getting component`)
+        console.log(`getting page component: [${componentChunkName}]`)
         cachedFetch(componentChunkName, fetchComponent)
           .then(preferDefault)
           .then(component => {
@@ -407,13 +408,11 @@ const queue = {
               pageContext: pageData.pageContext,
             }
 
-            console.log(jsonData)
             const pageResources = {
               component,
               json: jsonData,
               page,
             }
-            console.log(pageResources)
 
             // TODO
             // pageResources.page.jsonURL = createJsonURL(
