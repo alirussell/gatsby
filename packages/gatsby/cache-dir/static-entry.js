@@ -50,6 +50,16 @@ const getPageDataPath = path => {
 
 const createElement = React.createElement
 
+const sanitizeComponents = components => {
+  if (Array.isArray(components)) {
+    // remove falsy items
+    return components.filter(val => (Array.isArray(val) ? val.length > 0 : val))
+  } else {
+    // we also accept single components, so we need to handle this case as well
+    return components ? [components] : []
+  }
+}
+
 export default (pagePath, callback) => {
   let bodyHtml = ``
   let headComponents = [
@@ -70,7 +80,7 @@ export default (pagePath, callback) => {
   }
 
   const setHeadComponents = components => {
-    headComponents = headComponents.concat(components)
+    headComponents = headComponents.concat(sanitizeComponents(components))
   }
 
   const setHtmlAttributes = attributes => {
@@ -82,11 +92,13 @@ export default (pagePath, callback) => {
   }
 
   const setPreBodyComponents = components => {
-    preBodyComponents = preBodyComponents.concat(components)
+    preBodyComponents = preBodyComponents.concat(sanitizeComponents(components))
   }
 
   const setPostBodyComponents = components => {
-    postBodyComponents = postBodyComponents.concat(components)
+    postBodyComponents = postBodyComponents.concat(
+      sanitizeComponents(components)
+    )
   }
 
   const setBodyProps = props => {
@@ -96,19 +108,19 @@ export default (pagePath, callback) => {
   const getHeadComponents = () => headComponents
 
   const replaceHeadComponents = components => {
-    headComponents = components
+    headComponents = sanitizeComponents(components)
   }
 
   const getPreBodyComponents = () => preBodyComponents
 
   const replacePreBodyComponents = components => {
-    preBodyComponents = components
+    preBodyComponents = sanitizeComponents(components)
   }
 
   const getPostBodyComponents = () => postBodyComponents
 
   const replacePostBodyComponents = components => {
-    postBodyComponents = components
+    postBodyComponents = sanitizeComponents(components)
   }
 
   const pageDataPath = getPageDataPath(pagePath)

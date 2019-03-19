@@ -5,6 +5,7 @@ const {
   isIntrospectionType,
   defaultFieldResolver,
   assertValidName,
+  getNamedType,
 } = require(`graphql`)
 const apiRunner = require(`../utils/api-runner-node`)
 const report = require(`gatsby-cli/lib/reporter`)
@@ -64,6 +65,7 @@ const rebuildSchemaWithSitePage = async ({
     parentSpan,
   })
   exampleValueStore.saveTypeIfChanged(schemaComposer, `SitePage`)
+
   await processTypeComposer({
     schemaComposer,
     typeComposer,
@@ -289,9 +291,8 @@ const addThirdPartySchemas = ({
   parentSpan,
 }) => {
   thirdPartySchemas.forEach(schema => {
-    const queryTC = schemaComposer.TypeComposer.createTemp(
-      schema.getQueryType()
-    )
+    const schemaQueryType = schema.getQueryType()
+    const queryTC = schemaComposer.TypeComposer.createTemp(schemaQueryType)
     const fields = queryTC.getFields()
     schemaComposer.Query.addFields(fields)
 
@@ -301,12 +302,21 @@ const addThirdPartySchemas = ({
     Object.keys(types).forEach(typeName => {
       const type = types[typeName]
       if (
-        type !== schema.getQueryType() &&
+        type !== schemaQueryType &&
         !isSpecifiedScalarType(type) &&
         !isIntrospectionType(type)
       ) {
         type.isThirdPartyType = true
-        schemaComposer.add(type)
+        const typeComposer = schemaComposer.TypeComposer.createTemp(type)
+        typeComposer.getFieldNames().forEach(fieldName => {
+          const fieldType = typeComposer.getFieldType(fieldName)
+          if (getNamedType(fieldType) === schemaQueryType) {
+            typeComposer.extendField(fieldName, {
+              type: `Query`,
+            })
+          }
+        })
+        schemaComposer.add(typeComposer)
       }
     })
   })

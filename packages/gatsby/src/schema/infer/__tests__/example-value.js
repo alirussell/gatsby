@@ -327,41 +327,61 @@ Object {
 
   describe(`handles mix of date strings and date objects`, () => {
     it(`infers mixed string and object dates as Date`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
           { date: new Date(`2017-12-01T14:59:45.600Z`) },
           { date: `2017-01-12T18:13:38.326Z` },
+          { date: `` },
         ],
         typeConflictReporter,
       })
-      expect(example.date).toMatchInlineSnapshot(`2017-12-01T14:59:45.600Z`)
-    })
+      expect(example.date).toMatchInlineSnapshot(`"1978-09-26"`)
 
-    it(`infers mixed string and object dates in other order as Date`, () => {
-      const example = getExampleValue({
+      example = getExampleValue({
         nodes: [
+          { date: `2017-01-12T18:13:38.326Z` },
+          { date: new Date(`2017-12-01T14:59:45.600Z`) },
+          { date: `` },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.date).toMatchInlineSnapshot(`"1978-09-26"`)
+
+      example = getExampleValue({
+        nodes: [
+          { date: `` },
           { date: `2017-01-12T18:13:38.326Z` },
           { date: new Date(`2017-12-01T14:59:45.600Z`) },
         ],
         typeConflictReporter,
       })
-      expect(example.date).toMatchInlineSnapshot(`"2017-01-12T18:13:38.326Z"`)
+      expect(example.date).toMatchInlineSnapshot(`"1978-09-26"`)
     })
 
     it(`infers mixed date objects and non-date strings as string`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
           { date: new Date(`2017-12-01T14:59:45.600Z`) },
           { date: `This is not a date!!!!!!` },
+          { date: `` },
         ],
         typeConflictReporter,
       })
       expect(example.date).toEqual(`String`)
-    })
 
-    it(`infers mixed date objects and non-date strings as string`, () => {
-      const example = getExampleValue({
+      example = getExampleValue({
         nodes: [
+          { date: `This is not a date!!!!!!` },
+          { date: new Date(`2017-12-01T14:59:45.600Z`) },
+          { date: `` },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.date).toEqual(`String`)
+
+      example = getExampleValue({
+        nodes: [
+          { date: `` },
           { date: `This is not a date!!!!!!` },
           { date: new Date(`2017-12-01T14:59:45.600Z`) },
         ],
@@ -371,8 +391,37 @@ Object {
     })
 
     it(`infers arrays with mix of date strings and date objects as dates`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
+          { dates: [`2017-01-12T18:13:38.326Z`] },
+          { dates: [``] },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toMatchInlineSnapshot(`
+Array [
+  "1978-09-26",
+]
+`)
+
+      example = getExampleValue({
+        nodes: [
+          { dates: [`2017-01-12T18:13:38.326Z`] },
+          { dates: [``] },
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toMatchInlineSnapshot(`
+Array [
+  "1978-09-26",
+]
+`)
+
+      example = getExampleValue({
+        nodes: [
+          { dates: [``] },
           { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
           { dates: [`2017-01-12T18:13:38.326Z`] },
         ],
@@ -380,14 +429,35 @@ Object {
       })
       expect(example.dates).toMatchInlineSnapshot(`
 Array [
-  2017-12-01T14:59:45.600Z,
+  "1978-09-26",
 ]
 `)
     })
 
     it(`infers arrays of mixed date objects and non-date strings as strings`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
+          { dates: [`This is not a date!!!!!!`] },
+          { dates: [``] },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toEqual([`String`])
+
+      example = getExampleValue({
+        nodes: [
+          { dates: [`This is not a date!!!!!!`] },
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
+          { dates: [``] },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toEqual([`String`])
+
+      example = getExampleValue({
+        nodes: [
+          { dates: [``] },
           { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
           { dates: [`This is not a date!!!!!!`] },
         ],
@@ -397,12 +467,13 @@ Array [
     })
 
     it(`infers single array of mixed date objects and date strings as date`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
           {
             dates: [
               new Date(`2017-12-01T14:59:45.600Z`),
               `2017-01-12T18:13:38.326Z`,
+              ``,
             ],
           },
         ],
@@ -410,16 +481,67 @@ Array [
       })
       expect(example.dates).toMatchInlineSnapshot(`
 Array [
-  2017-12-01T14:59:45.600Z,
+  "1978-09-26",
+]
+`)
+
+      example = getExampleValue({
+        nodes: [
+          {
+            dates: [
+              `2017-01-12T18:13:38.326Z`,
+              new Date(`2017-12-01T14:59:45.600Z`),
+              ``,
+            ],
+          },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toMatchInlineSnapshot(`
+Array [
+  "1978-09-26",
+]
+`)
+
+      example = getExampleValue({
+        nodes: [
+          {
+            dates: [
+              ``,
+              `2017-01-12T18:13:38.326Z`,
+              new Date(`2017-12-01T14:59:45.600Z`),
+            ],
+          },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toMatchInlineSnapshot(`
+Array [
+  "1978-09-26",
 ]
 `)
     })
 
     it(`infers arrays of mixed date objects and non-date strings as strings`, () => {
-      const example = getExampleValue({
+      let example = getExampleValue({
         nodes: [
           {
             dates: [
+              new Date(`2017-12-01T14:59:45.600Z`),
+              ``,
+              `This is not a date!!!!!!`,
+            ],
+          },
+        ],
+        typeConflictReporter,
+      })
+      expect(example.dates).toEqual([`String`])
+
+      example = getExampleValue({
+        nodes: [
+          {
+            dates: [
+              ``,
               new Date(`2017-12-01T14:59:45.600Z`),
               `This is not a date!!!!!!`,
             ],
@@ -437,16 +559,17 @@ Array [
             dates: [
               new Date(`2017-12-01T14:59:45.600Z`),
               `2017-01-12T18:13:38.326Z`,
+              ``,
             ],
           },
-          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
-          { dates: [`2017-01-12T18:13:38.326Z`] },
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`), ``] },
+          { dates: [``, `2017-01-12T18:13:38.326Z`] },
         ],
         typeConflictReporter,
       })
       expect(example.dates).toMatchInlineSnapshot(`
 Array [
-  2017-12-01T14:59:45.600Z,
+  "1978-09-26",
 ]
 `)
     })
@@ -456,6 +579,7 @@ Array [
         nodes: [
           {
             dates: [
+              ``,
               new Date(`2017-12-01T14:59:45.600Z`),
               `This is not a date!!!!!!`,
             ],
@@ -475,7 +599,7 @@ Array [
               `2017-01-12T18:13:38.326Z`,
             ],
           },
-          { dates: [new Date(`2017-12-01T14:59:45.600Z`)] },
+          { dates: [new Date(`2017-12-01T14:59:45.600Z`), ``] },
           { dates: [`This is not a date!!!!!!`] },
         ],
         typeConflictReporter,
@@ -487,6 +611,7 @@ Array [
         nodes: [
           {
             dates: [
+              ``,
               new Date(`2017-12-01T14:59:45.600Z`),
               `This is not a date!!!!!!`,
             ],

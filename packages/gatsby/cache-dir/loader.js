@@ -439,6 +439,16 @@ const queue = {
     }),
 }
 
+// TODO This doesn't make sense anymore
+export const postInitialRenderWork = () => {
+  inInitialRender = false
+  if (process.env.NODE_ENV === `production`) {
+    // We got all resources needed for first mount,
+    // we can fetch resources for all pages.
+    fetchPageResourceMap()
+  }
+}
+
 export const setApiRunnerForLoader = runner => {
   apiRunner = runner
   disableCorePrefetching = apiRunner(`disableCorePrefetching`)
