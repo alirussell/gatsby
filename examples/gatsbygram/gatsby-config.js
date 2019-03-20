@@ -23,6 +23,7 @@ module.exports = {
       options: {
         name: `data`,
         path: path.join(__dirname, `data`),
+        omitFields: [`accessTime`, `atime`, `atimeMs`],
       },
     },
     // This plugin exposes helper functions for processing
