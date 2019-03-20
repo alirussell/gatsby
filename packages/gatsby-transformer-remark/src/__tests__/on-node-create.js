@@ -1,3 +1,4 @@
+const Promise = require(`bluebird`)
 const _ = require(`lodash`)
 const onCreateNode = require(`../on-node-create`)
 const { graphql } = require(`gatsby/graphql`)

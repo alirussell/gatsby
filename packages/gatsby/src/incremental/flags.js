@@ -18,6 +18,10 @@ class Flags {
     this.schema = true
   }
   queryJob(pathOrJsonName) {
+    if (pathOrJsonName.startsWith(`sq--`)) {
+      console.log(`static query changed`)
+      this.staticQueryChanged = true
+    }
     this.queryJobs.add(pathOrJsonName)
   }
   queryResult(queryId) {

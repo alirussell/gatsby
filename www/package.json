@@ -54,7 +54,6 @@
     "gatsby-transformer-screenshot": "^2.0.4",
     "gatsby-transformer-sharp": "^2.1.1",
     "gatsby-transformer-yaml": "^2.1.1",
-    "graphql-compose": "^5.11.0",
     "graphql-request": "1.6.0",
     "gray-percentage": "^2.0.0",
     "hex2rgba": "^0.0.1",
