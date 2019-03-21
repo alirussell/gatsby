@@ -59,18 +59,23 @@ type BootstrapArgs = {
 }
 
 function getProgram(args) {
-  const directory = slash(args.directory)
-  const program = {
-    ...args,
-    browserslist: getBrowserslist(directory),
-    // Fix program directory path for windows env.
-    directory,
+  // TODO come up with better test if programs has run already
+  if (!_.isEmpty(store.getState().program.browserslist)) {
+    return store.getState().program
+  } else {
+    const directory = slash(args.directory)
+    const program = {
+      ...args,
+      browserslist: getBrowserslist(directory),
+      // Fix program directory path for windows env.
+      directory,
+    }
+    store.dispatch({
+      type: `SET_PROGRAM`,
+      payload: program,
+    })
+    return program
   }
-  store.dispatch({
-    type: `SET_PROGRAM`,
-    payload: program,
-  })
-  return program
 }
 
 async function initConfig({ bootstrapSpan, program }) {
@@ -199,6 +204,7 @@ async function initCache(context) {
     `)
   }
   if (!oldPluginsHash || pluginsHash !== oldPluginsHash) {
+    flags.srcDirty = true
     try {
       // Attempt to empty dir if remove fails,
       // like when directory is mount point
@@ -227,6 +233,9 @@ async function initCache(context) {
 }
 
 async function setExtensions({ bootstrapSpan }) {
+  if (!_.isEmpty(store.getState().program.extensions)) {
+    return
+  }
   // Collect resolvable extensions and attach to program. This is used
   // by plugin-page-creator (in create pages statefully phase). Also used in webpack config
   const extensions = [`.mjs`, `.js`, `.jsx`, `.wasm`, `.json`]

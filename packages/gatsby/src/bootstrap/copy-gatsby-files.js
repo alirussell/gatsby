@@ -9,6 +9,16 @@ async function copyGatsbyFiles({
   cacheDirectory,
   flattenedPlugins,
 }) {
+  // Test if the cache files have already been copied. If so, there's
+  // nothing else to do
+  try {
+    await fs.readFile(`${cacheDirectory}/production-app.js`)
+    console.log(`gatsby cache files already copied`)
+    return
+  } catch (err) {
+    // This means that gatsby files have already been copied. So we
+    // don't need to continue
+  }
   // Copy our site files to the root of the site.
   let activity = report.activityTimer(`copy gatsby files`, {
     parentSpan: bootstrapSpan,

@@ -10,6 +10,7 @@ class Flags {
     this.pages = new Set()
     this.pageDatas = new Set()
     this.renderPageDirty = false
+    this.srcDirty = false
   }
   nodeTypeCollection(type) {
     this.nodeTypeCollections.add(type)
@@ -47,7 +48,10 @@ class Flags {
   }
   isWebpackDirty() {
     return (
-      this.matchPathsChanged || this.staticQueryChanged || this.redirectsChanged
+      this.srcDirty ||
+      this.matchPathsChanged ||
+      this.staticQueryChanged ||
+      this.redirectsChanged
     )
   }
 }
