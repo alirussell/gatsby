@@ -244,7 +244,6 @@ async function runQueries({ bootstrapSpan }) {
       ).toFixed(2)} queries/second`
     )
   })
-  console.log(`query jobs`, flags.queryJobs)
   await runQueriesForPathnames(Array.from(flags.queryJobs))
   activity.end()
 }
@@ -332,6 +331,9 @@ async function build(args: BootstrapArgs) {
   await apiRunner(`onPreInit`, { parentSpan: activity.span })
   activity.end()
 
+  // full build inits the cache here. We don't need to since no code
+  // has changed
+
   if (process.env.GATSBY_DB_NODES === `loki`) {
     initLoki(bootstrapContext)
   }
@@ -339,9 +341,6 @@ async function build(args: BootstrapArgs) {
   // By now, our nodes database has been loaded, so ensure that we
   // have tracked all inline objects
   nodeTracking.trackDbNodes()
-
-  // full build inits the cache here. We don't need to since no code
-  // has changed
 
   // onPreBootstrap
   activity = report.activityTimer(`onPreBootstrap`)
