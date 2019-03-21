@@ -296,8 +296,6 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
 }
 
 module.exports = async (args: BootstrapArgs) => {
-  flags.matchPaths()
-
   // Same as incremental from here
 
   const spanArgs = args.parentSpan ? { childOf: args.parentSpan } : {}
@@ -333,8 +331,6 @@ module.exports = async (args: BootstrapArgs) => {
   await apiRunnerNode(`onPreInit`, { parentSpan: activity.span })
   activity.end()
 
-  // Not the same
-
   await initCache(bootstrapContext, flattenedPlugins)
 
   // Ensure the public/static directory
@@ -347,8 +343,6 @@ module.exports = async (args: BootstrapArgs) => {
   /**
    * Start the main bootstrap processes.
    */
-
-  // Same as incremental again
 
   if (process.env.GATSBY_DB_NODES === `loki`) {
     await initLoki(bootstrapContext)
