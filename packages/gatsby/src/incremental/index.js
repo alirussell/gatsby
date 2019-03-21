@@ -55,7 +55,8 @@ type BootstrapArgs = {
 }
 
 function getProgram(args) {
-  if (store.getState().program) {
+  // TODO come up with better test if programs has run already
+  if (!_.isEmpty(store.getState().program.browserslist)) {
     return store.getState().program
   } else {
     const directory = slash(args.directory)

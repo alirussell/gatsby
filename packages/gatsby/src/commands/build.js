@@ -85,7 +85,7 @@ module.exports = async function build(program: BuildArgs) {
   buildSpan.setTag(`directory`, program.directory)
 
   if (process.env.INCREMENTAL == `true`) {
-    await incrementalBuild({ buildSpan })
+    await incrementalBuild({ ...program, parentSpan: buildSpan })
   } else {
     await fullBuild({ program, buildSpan })
   }
