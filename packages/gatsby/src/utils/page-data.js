@@ -51,7 +51,7 @@ function makeQueue({ program, store, flags }) {
     id: (task, cb) => {
       cb(null, task.path)
     },
-    maxTimeout: 1000,
+    maxTimeout: 60000, // 60s
     failTaskOnProcessException: true,
   })
   finishedPromise = new Promise((resolve, reject) => {
