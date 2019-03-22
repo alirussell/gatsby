@@ -329,18 +329,6 @@ async function runBootstrapQueries({ bootstrapSpan, graphqlRunner }) {
   })
   await runInitialQueries(activity)
   activity.end()
-
-  // Write out files.
-  activity = report.activityTimer(`write out page data`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  try {
-    await writePages()
-  } catch (err) {
-    report.panic(`Failed to write out page data`, err)
-  }
-  activity.end()
 }
 
 function saveQuery(components, component, query) {
@@ -576,12 +564,16 @@ module.exports = async (args: BootstrapArgs) => {
   } else {
     await runIncrementalQueries({ bootstrapSpan })
 
-    // Write out matchPaths.json
-    activity = report.activityTimer(`write out pages`, {
+    // Write out files.
+    activity = report.activityTimer(`write out page data`, {
       parentSpan: bootstrapSpan,
     })
     activity.start()
-    await writePages()
+    try {
+      await writePages()
+    } catch (err) {
+      report.panic(`Failed to write out page data`, err)
+    }
     activity.end()
   }
   await writeRedirects({ activity, bootstrapSpan })
