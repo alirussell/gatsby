@@ -377,14 +377,14 @@ async function runIncrementalQueries({ bootstrapSpan }) {
   const state = store.getState()
 
   flags.nodes.forEach(nodeId => {
-    const queryIds = state.depGraph.queryDependsOnNode[nodeId] || []
+    const queryIds = state.componentDataDependencies.nodes[nodeId] || []
     queryIds.forEach(queryId => {
       flags.queryJob(queryId)
     })
   })
 
   flags.nodeTypeCollections.forEach(type => {
-    const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
+    const queries = state.componentDataDependencies.connections[type] || []
     queries.forEach(queryId => {
       flags.queryJob(queryId)
     })

@@ -1,5 +1,13 @@
 const _ = require(`lodash`)
 
+// const uniqPush = val => array => {
+//   array = _.defaultTo(array, [])
+//   if (!array.includes(val)) {
+//     array.push(val)
+//   }
+//   return array
+// }
+
 module.exports = (state = { nodes: {}, connections: {} }, action) => {
   switch (action.type) {
     case `DELETE_CACHE`:
