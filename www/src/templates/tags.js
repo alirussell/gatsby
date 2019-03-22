@@ -7,7 +7,6 @@ import Button from "../components/button"
 import Container from "../components/container"
 import Layout from "../components/layout"
 import { space } from "../utils/presets"
-import { rhythm } from "../utils/typography"
 
 // Select first tag with whitespace instead of hyphens for
 // readability. But if none present, just use the first tag in the
@@ -40,8 +39,8 @@ const Tags = ({ pageContext, data, location }) => {
             post={node}
             key={node.fields.slug}
             css={{
-              marginTop: rhythm(space[9]),
-              marginBottom: rhythm(space[9]),
+              marginTop: space[9],
+              marginBottom: space[9],
             }}
           />
         ))}
