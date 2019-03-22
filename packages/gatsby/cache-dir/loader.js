@@ -56,22 +56,22 @@ const findPath = rawPathname => {
 
   let foundPath
   Object.keys(matchPaths).some(matchPath => {
-    const path = matchPaths[matchPath]
     if (match(matchPath, trimmedPathname)) {
-      foundPath = path
-      pathCache[trimmedPathname] = foundPath
+      foundPath = matchPaths[matchPath]
       return foundPath
     }
     // Finally, try and match request with default document.
     if (trimmedPathname === `/index.html`) {
       foundPath = `/`
-      pathCache[trimmedPathname] = foundPath
       return foundPath
     }
     return false
   })
-  pathCache[trimmedPathname] = trimmedPathname
-  return trimmedPathname
+  if (!foundPath) {
+    foundPath = trimmedPathname
+  }
+  pathCache[trimmedPathname] = foundPath
+  return foundPath
 }
 
 const wrapHistory = fetchPromise => {

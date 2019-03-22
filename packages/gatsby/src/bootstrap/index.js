@@ -41,6 +41,7 @@ const {
 const {
   runInitialQueries,
   runQueriesForPathnames,
+  queueQueryForPathname,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
 const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
 const { writePages } = require(`../internal-plugins/query-runner/pages-writer`)
@@ -296,21 +297,21 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
 }
 
 async function runBootstrapQueries({ bootstrapSpan, graphqlRunner }) {
-  // Extract queries
-  let activity = report.activityTimer(`extract queries from components`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await extractQueries()
-  activity.end()
+  let activity
+  if (flags.srcDirty) {
+    console.log(`srcDirty`)
+    // Extract queries
+    activity = report.activityTimer(`extract queries from components`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    await extractQueries()
+    activity.end()
+  }
 
   // Start the createPages hot reloader.
   if (process.env.NODE_ENV !== `production`) {
     require(`./page-hot-reloader`)(graphqlRunner)
-  }
-
-  for (const [path] of store.getState().pages) {
-    pageData.getQueue().push({ path })
   }
 
   // Run queries
@@ -564,14 +565,12 @@ module.exports = async (args: BootstrapArgs) => {
     }
   })
   for (const path of flags.pages) {
+    queueQueryForPathname(path)
     pageData.getQueue().push({ path })
   }
 
-  if (flags.srcDirty) {
-    await runBootstrapQueries({ bootstrapSpan, graphqlRunner })
-  } else {
-    await runIncrementalQueries({ bootstrapSpan })
-  }
+  await runBootstrapQueries({ bootstrapSpan, graphqlRunner })
+
   // Write out files.
   activity = report.activityTimer(`write out page data`, {
     parentSpan: bootstrapSpan,
