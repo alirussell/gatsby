@@ -78,6 +78,10 @@ module.exports = ({ flags }) => {
         }
         break
       }
+      case `REMOVE_TEMPLATE_COMPONENT`: {
+        flags.componentChanged = true
+        break
+      }
       case `SET_WEBPACK_JS_COMPILATION_HASH`: {
         _.set(state, [`compilationHash`], action.payload)
         flags.renderPage()

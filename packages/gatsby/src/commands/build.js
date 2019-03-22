@@ -1,7 +1,7 @@
 /* @flow */
 
 const report = require(`gatsby-cli/lib/reporter`)
-const buildHTML = require(`./build-html`)
+const buildHtml = require(`./build-html`)
 const buildProductionBundle = require(`./build-javascript`)
 const bootstrap = require(`../bootstrap`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
@@ -9,9 +9,9 @@ const { copyStaticDir } = require(`../utils/get-static-dir`)
 const { initTracer, stopTracer } = require(`../utils/tracer`)
 const chalk = require(`chalk`)
 const tracer = require(`opentracing`).globalTracer()
-const incrementalBuild = require(`../incremental`)
-const { emitter } = require(`../redux`)
+const { emitter, flags } = require(`../redux`)
 const db = require(`../db`)
+const pageData = require(`../utils/page-data`)
 
 function reportFailure(msg, err: Error) {
   report.log(``)
@@ -26,7 +26,12 @@ type BuildArgs = {
   openTracingConfigFile: string,
 }
 
-async function fullBuild({ program, buildSpan }) {
+module.exports = async function build(program: BuildArgs) {
+  initTracer(program.openTracingConfigFile)
+
+  const buildSpan = tracer.startSpan(`build`)
+  buildSpan.setTag(`directory`, program.directory)
+
   const { graphqlRunner } = await bootstrap({
     ...program,
     parentSpan: buildSpan,
@@ -42,21 +47,35 @@ async function fullBuild({ program, buildSpan }) {
   copyStaticDir()
 
   let activity
-  activity = report.activityTimer(
-    `Building production JavaScript and CSS bundles`,
-    { parentSpan: buildSpan }
-  )
-  activity.start()
-  await buildProductionBundle(program).catch(err => {
-    reportFailure(`Generating JavaScript bundles failed`, err)
-  })
-  activity.end()
+
+  if (flags.isWebpackDirty()) {
+    activity = report.activityTimer(
+      `Building production JavaScript and CSS bundles`,
+      { parentSpan: buildSpan }
+    )
+    activity.start()
+    await buildProductionBundle(program).catch(err => {
+      reportFailure(`Generating JavaScript bundles failed`, err)
+    })
+    activity.end()
+  }
+
+  if (flags.renderPageDirty) {
+    activity = report.activityTimer(`build render-page.js`, {
+      parentSpan: buildSpan,
+    })
+    activity.start()
+    await buildHtml.buildRenderPage()
+    activity.end()
+  }
+
+  await pageData.waitTillDrained()
 
   activity = report.activityTimer(`Building static HTML for pages`, {
     parentSpan: buildSpan,
   })
   activity.start()
-  await buildHTML.buildAll(program, activity).catch(err => {
+  await buildHtml.buildDirtyPages(activity).catch(err => {
     reportFailure(
       report.stripIndent`
         Building static HTML failed${
@@ -76,19 +95,6 @@ async function fullBuild({ program, buildSpan }) {
     graphql: graphqlRunner,
     parentSpan: buildSpan,
   })
-}
-
-module.exports = async function build(program: BuildArgs) {
-  initTracer(program.openTracingConfigFile)
-
-  const buildSpan = tracer.startSpan(`build`)
-  buildSpan.setTag(`directory`, program.directory)
-
-  if (process.env.INCREMENTAL == `true`) {
-    await incrementalBuild({ ...program, parentSpan: buildSpan })
-  } else {
-    await fullBuild({ program, buildSpan })
-  }
 
   report.info(`Done building in ${process.uptime()} sec`)
   emitter.emit(`BUILD_FINISHED`)

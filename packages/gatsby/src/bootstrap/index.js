@@ -40,12 +40,14 @@ const {
 } = require(`../internal-plugins/query-runner/query-watcher`)
 const {
   runInitialQueries,
+  runQueriesForPathnames,
 } = require(`../internal-plugins/query-runner/page-query-runner`)
 const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
 const { writePages } = require(`../internal-plugins/query-runner/pages-writer`)
-const {
-  writeRedirects,
-} = require(`../internal-plugins/query-runner/redirects-writer`)
+const redirectsWriter = require(`../internal-plugins/query-runner/redirects-writer`)
+
+const queryCompiler = require(`../internal-plugins/query-runner/query-compiler`)
+  .default
 
 // Override console.log to add the source file + line number.
 // Useful for debugging if you lose a console.log somewhere.
@@ -291,8 +293,153 @@ async function createPages({ bootstrapSpan, graphqlRunner }) {
       deletePage(page)
     }
   }
+}
 
-  // TODO double check rerun schema stuff
+async function runBootstrapQueries({ bootstrapSpan, graphqlRunner }) {
+  // Extract queries
+  let activity = report.activityTimer(`extract queries from components`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await extractQueries()
+  activity.end()
+
+  // Start the createPages hot reloader.
+  if (process.env.NODE_ENV !== `production`) {
+    require(`./page-hot-reloader`)(graphqlRunner)
+  }
+
+  for (const [path] of store.getState().pages) {
+    pageData.getQueue().push({ path })
+  }
+
+  // Run queries
+  activity = report.activityTimer(`run graphql queries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  const startQueries = process.hrtime()
+  queryQueue.on(`task_finish`, () => {
+    const stats = queryQueue.getStats()
+    activity.setStatus(
+      `${stats.total}/${stats.peak} ${(
+        stats.total / convertHrtime(process.hrtime(startQueries)).seconds
+      ).toFixed(2)} queries/second`
+    )
+  })
+  await runInitialQueries(activity)
+  activity.end()
+
+  // Write out files.
+  activity = report.activityTimer(`write out page data`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  try {
+    await writePages()
+  } catch (err) {
+    report.panic(`Failed to write out page data`, err)
+  }
+  activity.end()
+}
+
+function saveQuery(components, component, query) {
+  if (query.isStaticQuery) {
+    boundActionCreators.replaceStaticQuery({
+      name: query.name,
+      componentPath: query.path,
+      id: query.jsonName,
+      jsonName: query.jsonName,
+      query: query.text,
+      hash: query.hash,
+    })
+    boundActionCreators.deleteComponentsDependencies([query.jsonName])
+  } else if (components.has(component)) {
+    boundActionCreators.replaceComponentQuery({
+      query: query.text,
+      componentPath: component,
+    })
+  }
+}
+
+async function runIncrementalQueries({ bootstrapSpan }) {
+  // TODO clearInactiveComponents
+  if (flags.schema) {
+    console.log(`recompiling queries because schema changed`)
+    // Extract queries
+    let activity = report.activityTimer(`extract queries from components`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    const queries = await queryCompiler()
+    const components = new Map(store.getState().components)
+    queries.forEach((query, component) =>
+      saveQuery(components, component, query)
+    )
+    activity.end()
+    const pages = store.getState().pages
+    for (const path of pages) {
+      flags.queryJob(path)
+    }
+    for (const jsonName of store.getState().staticQueryComponents) {
+      flags.queryJob(jsonName)
+    }
+  }
+
+  const state = store.getState()
+  flags.nodeTypeCollections.forEach(type => {
+    const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
+    queries.forEach(queryId => {
+      flags.queryJob(queryId)
+    })
+  })
+
+  // All created/changed pages need to be rerun
+  flags.pages.forEach(path => {
+    flags.queryJob(path)
+  })
+
+  // Run queries
+  let activity = report.activityTimer(`run graphql queries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  const startQueries = process.hrtime()
+  queryQueue.on(`task_finish`, () => {
+    const stats = queryQueue.getStats()
+    activity.setStatus(
+      `${stats.total}/${stats.peak} ${(
+        stats.total / convertHrtime(process.hrtime(startQueries)).seconds
+      ).toFixed(2)} queries/second`
+    )
+  })
+  await runQueriesForPathnames(Array.from(flags.queryJobs))
+  activity.end()
+}
+
+async function writeRedirects({ bootstrapSpan }) {
+  // Write out redirects.
+  const activity = report.activityTimer(`write out redirect data`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await redirectsWriter.writeRedirects()
+  activity.end()
+}
+
+const checkJobsDone = resolve => {
+  if (store.getState().jobs.active.length === 0) {
+    resolve()
+  }
+}
+
+const debouncedCheckJobsDone = _.debounce(checkJobsDone, 100)
+
+function waitJobsFinished() {
+  return new Promise((resolve, reject) => {
+    checkJobsDone(resolve)
+    emitter.on(`END_JOB`, () => debouncedCheckJobsDone(resolve))
+  })
 }
 
 module.exports = async (args: BootstrapArgs) => {
@@ -385,6 +532,8 @@ module.exports = async (args: BootstrapArgs) => {
     )
   }
 
+  const existingPages = _.clone(store.getState().pages)
+
   await createPages({ activity, bootstrapSpan, graphqlRunner })
 
   activity = report.activityTimer(`onPreExtractQueries`, {
@@ -402,97 +551,59 @@ module.exports = async (args: BootstrapArgs) => {
   await require(`../schema`).rebuildWithSitePage({ parentSpan: activity.span })
   activity.end()
 
-  // Extract queries
-  activity = report.activityTimer(`extract queries from components`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await extractQueries()
-  activity.end()
-
-  // Start the createPages hot reloader.
-  if (process.env.NODE_ENV !== `production`) {
-    require(`./page-hot-reloader`)(graphqlRunner)
+  const eqPages = (page1, page2) => {
+    const changeKeys = [`component`, `context`, `matchPath`]
+    return (
+      page1 &&
+      page2 &&
+      _.isEqual(_.pick(page1, changeKeys), _.pick(page2, changeKeys))
+    )
   }
 
-  for (const path of store.getState().pages) {
+  // Check if pages changes actually occurred
+  const flaggedPaths = flags.pages
+  flaggedPaths.forEach(path => {
+    if (eqPages(existingPages.get(path), store.getState().pages.get(path))) {
+      flags.pages.delete(path)
+    }
+  })
+  for (const path of flags.pages) {
     pageData.getQueue().push({ path })
   }
 
-  // Run queries
-  activity = report.activityTimer(`run graphql queries`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  const startQueries = process.hrtime()
-  queryQueue.on(`task_finish`, () => {
-    const stats = queryQueue.getStats()
-    activity.setStatus(
-      `${stats.total}/${stats.peak} ${(
-        stats.total / convertHrtime(process.hrtime(startQueries)).seconds
-      ).toFixed(2)} queries/second`
-    )
-  })
-  await runInitialQueries(activity)
-  activity.end()
-
-  // Write out files.
-  activity = report.activityTimer(`write out page data`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  try {
-    await writePages()
-  } catch (err) {
-    report.panic(`Failed to write out page data`, err)
-  }
-  activity.end()
-
-  // Write out redirects.
-  activity = report.activityTimer(`write out redirect data`, {
-    parentSpan: bootstrapSpan,
-  })
-  activity.start()
-  await writeRedirects()
-  activity.end()
-
-  let onEndJob
-
-  const checkJobsDone = _.debounce(async resolve => {
-    const state = store.getState()
-    if (state.jobs.active.length === 0) {
-      emitter.off(`END_JOB`, onEndJob)
-
-      await finishBootstrap(bootstrapSpan)
-      resolve({ graphqlRunner })
-    }
-  }, 100)
-
-  if (store.getState().jobs.active.length === 0) {
-    await finishBootstrap(bootstrapSpan)
-    return { graphqlRunner }
+  if (flags.srcDirty) {
+    await runBootstrapQueries({ bootstrapSpan, graphqlRunner })
   } else {
-    return new Promise(resolve => {
-      // Wait until all side effect jobs are finished.
-      onEndJob = () => checkJobsDone(resolve)
-      emitter.on(`END_JOB`, onEndJob)
-    })
-  }
-}
+    await runIncrementalQueries({ bootstrapSpan })
 
-const finishBootstrap = async bootstrapSpan => {
+    // Write out matchPaths.json
+    activity = report.activityTimer(`write out pages`, {
+      parentSpan: bootstrapSpan,
+    })
+    activity.start()
+    await writePages()
+    activity.end()
+  }
+  await writeRedirects({ activity, bootstrapSpan })
+  // End different
+
+  // Wait for jobs to finish
+  await waitJobsFinished()
+
   // onPostBootstrap
-  const activity = report.activityTimer(`onPostBootstrap`, {
+  activity = report.activityTimer(`onPostBootstrap`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
   await apiRunnerNode(`onPostBootstrap`, { parentSpan: activity.span })
   activity.end()
 
+  bootstrapSpan.finish()
+
   report.log(``)
   report.info(`bootstrap finished - ${process.uptime()} s`)
   report.log(``)
   emitter.emit(`BOOTSTRAP_FINISHED`)
 
-  bootstrapSpan.finish()
+  return { graphqlRunner }
 }
