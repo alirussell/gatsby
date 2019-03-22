@@ -1,6 +1,7 @@
 class Flags {
   constructor() {
     this.nodeTypeCollections = new Set()
+    this.nodes = new Set()
     this.schema = false
     this.queryJobs = new Set()
     this.queryResults = new Set()
@@ -12,6 +13,9 @@ class Flags {
     this.renderPageDirty = false
     this.srcDirty = false
     this.componentChanged = false
+  }
+  node(id) {
+    this.nodes.add(id)
   }
   nodeTypeCollection(type) {
     this.nodeTypeCollections.add(type)

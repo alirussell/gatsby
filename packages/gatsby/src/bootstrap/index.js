@@ -375,6 +375,14 @@ async function runIncrementalQueries({ bootstrapSpan }) {
   }
 
   const state = store.getState()
+
+  flags.nodes.forEach(nodeId => {
+    const queryIds = state.depGraph.queryDependsOnNode[nodeId] || []
+    queryIds.forEach(queryId => {
+      flags.queryJob(queryId)
+    })
+  })
+
   flags.nodeTypeCollections.forEach(type => {
     const queries = state.depGraph.queryDependsOnNodeCollection[type] || []
     queries.forEach(queryId => {
@@ -563,19 +571,19 @@ module.exports = async (args: BootstrapArgs) => {
     await runBootstrapQueries({ bootstrapSpan, graphqlRunner })
   } else {
     await runIncrementalQueries({ bootstrapSpan })
-
-    // Write out files.
-    activity = report.activityTimer(`write out page data`, {
-      parentSpan: bootstrapSpan,
-    })
-    activity.start()
-    try {
-      await writePages()
-    } catch (err) {
-      report.panic(`Failed to write out page data`, err)
-    }
-    activity.end()
   }
+  // Write out files.
+  activity = report.activityTimer(`write out page data`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  try {
+    await writePages()
+  } catch (err) {
+    report.panic(`Failed to write out page data`, err)
+  }
+  activity.end()
+
   await writeRedirects({ activity, bootstrapSpan })
   // End different
 

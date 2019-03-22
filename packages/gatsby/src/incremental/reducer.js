@@ -25,10 +25,7 @@ module.exports = ({ flags }) => {
   function flagDirtyNodes(state, node) {
     //    console.log(`flagging node`, node.internal.type, node.id)
     flags.nodeTypeCollection(node.internal.type)
-    const queryId = state.queryDependsOnNode[node.id]
-    if (queryId) {
-      flags.queryJob(queryId)
-    }
+    flags.node(node.id)
   }
 
   function trackPageDependency(state, node) {
@@ -119,7 +116,7 @@ module.exports = ({ flags }) => {
           )
         } else {
           //          console.log(`page->node dep`, nodeId, path)
-          _.set(state, [`queryDependsOnNode`, nodeId], path)
+          _.update(state, [`queryDependsOnNode`, nodeId], uniqPush(path))
         }
         break
       }
