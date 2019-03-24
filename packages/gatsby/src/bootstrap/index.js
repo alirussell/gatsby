@@ -7,7 +7,6 @@ const md5File = require(`md5-file/promise`)
 const crypto = require(`crypto`)
 const del = require(`del`)
 const path = require(`path`)
-const convertHrtime = require(`convert-hrtime`)
 const Promise = require(`bluebird`)
 
 const apiRunnerNode = require(`../utils/api-runner-node`)
@@ -30,7 +29,6 @@ process.on(`unhandledRejection`, (reason, p) => {
 })
 
 const queryRunner = require(`../internal-plugins/query-runner/page-query-runner`)
-const queryQueue = require(`../internal-plugins/query-runner/query-queue`)
 const {
   extractQueries,
 } = require(`../internal-plugins/query-runner/query-watcher`)
@@ -452,74 +450,30 @@ module.exports = async (args: BootstrapArgs) => {
     require(`./page-hot-reloader`)(graphqlRunner)
   }
 
-  const queryIds = queryRunner.calcDirtyQueryIds()
+  const queryIds = queryRunner.calcDirtyQueryIds(store.getState())
   const { staticQueryIds, pageQueryIds } = queryRunner.categorizeQueryIds(
     queryIds
   )
 
-  {
-    activity = report.activityTimer(`run static queries`, {
-      parentSpan: bootstrapSpan,
-    })
-    activity.start()
-    if (staticQueryIds.length > 0) {
-      const startQueries = process.hrtime()
+  activity = report.activityTimer(`run static queries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await queryRunner.processStaticQueries(staticQueryIds, {
+    activity,
+    state: store.getState(),
+  })
+  activity.end()
 
-      const queryJobs = staticQueryIds.map(
-        queryRunner.staticQueryMaker(store.getState())
-      )
-
-      const queue = queryQueue.create()
-      queue.on(`task_finish`, () => {
-        const stats = queue.getStats()
-        activity.setStatus(
-          `${stats.total}/${stats.peak} ${(
-            stats.total / convertHrtime(process.hrtime(startQueries)).seconds
-          ).toFixed(2)} queries/second`
-        )
-      })
-      const drainedPromise = new Promise(resolve => {
-        queue.once(`drain`, resolve)
-      })
-      queryJobs.forEach(queryJob => {
-        queue.push(queryJob)
-      })
-      await drainedPromise
-    }
-    activity.end()
-  }
-
-  {
-    activity = report.activityTimer(`run page queries`, {
-      parentSpan: bootstrapSpan,
-    })
-    activity.start()
-    if (pageQueryIds.length > 0) {
-      const startQueries = process.hrtime()
-
-      const queryJobs = pageQueryIds.map(
-        queryRunner.pageQueryMaker(store.getState())
-      )
-
-      const queue = queryQueue.create()
-      queue.on(`task_finish`, () => {
-        const stats = queue.getStats()
-        activity.setStatus(
-          `${stats.total}/${stats.peak} ${(
-            stats.total / convertHrtime(process.hrtime(startQueries)).seconds
-          ).toFixed(2)} queries/second`
-        )
-      })
-      const drainedPromise = new Promise(resolve => {
-        queue.once(`drain`, resolve)
-      })
-      queryJobs.forEach(queryJob => {
-        queue.push(queryJob)
-      })
-      await drainedPromise
-    }
-    activity.end()
-  }
+  activity = report.activityTimer(`run page queries`, {
+    parentSpan: bootstrapSpan,
+  })
+  activity.start()
+  await queryRunner.processPageQueries(pageQueryIds, {
+    activity,
+    state: store.getState(),
+  })
+  activity.end()
 
   require(`../redux/actions`).boundActionCreators.setProgramStatus(
     `BOOTSTRAP_QUERY_RUNNING_FINISHED`

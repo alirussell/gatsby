@@ -1,6 +1,7 @@
 const _ = require(`lodash`)
 const { store, emitter } = require(`../../redux`)
 const queryQueue = require(`./query-queue`)
+const convertHrtime = require(`convert-hrtime`)
 
 let seenIdsWithoutDataDependencies = []
 let queuedDirtyActions = []
@@ -52,8 +53,7 @@ const findIdsWithoutDataDependencies = state => {
   return notTrackedIds
 }
 
-const findDirtyIds = actions => {
-  const state = store.getState()
+const findDirtyIds = (actions, { state }) => {
   const uniqDirties = _.uniq(
     actions.reduce((dirtyIds, action) => {
       const node = action.payload
@@ -74,12 +74,12 @@ const findDirtyIds = actions => {
   return uniqDirties
 }
 
-const calcDirtyQueryIds = () => {
+const calcDirtyQueryIds = state => {
   queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
-  const dirtyIds = findDirtyIds(queuedDirtyActions)
+  const dirtyIds = findDirtyIds(queuedDirtyActions, { state })
   queuedDirtyActions = []
 
-  const cleanIds = findIdsWithoutDataDependencies(store.getState())
+  const cleanIds = findIdsWithoutDataDependencies(state)
 
   // Construct paths for all queries to run
   let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
@@ -102,12 +102,12 @@ const calcDirtyQueryIds = () => {
 }
 
 // TODO refactor this and above
-const calcFollowupDirtyQueryIds = () => {
+const calcFollowupDirtyQueryIds = state => {
   queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
   const dirtyIds = findDirtyIds(queuedDirtyActions)
   queuedDirtyActions = []
 
-  const cleanIds = findIdsWithoutDataDependencies(store.getState())
+  const cleanIds = findIdsWithoutDataDependencies(state)
 
   // Construct paths for all queries to run
   let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
@@ -174,6 +174,40 @@ const pageQueryMaker = state => queryId => {
   return makePageQueryJob(page, component)
 }
 
+const processQueries = async (queryIds, { activity, toQueryJob }) => {
+  if (queryIds.length > 0) {
+    const startQueries = process.hrtime()
+
+    const queue = queryQueue.create()
+    queue.on(`task_finish`, () => {
+      const stats = queue.getStats()
+      activity.setStatus(
+        `${stats.total}/${stats.peak} ${(
+          stats.total / convertHrtime(process.hrtime(startQueries)).seconds
+        ).toFixed(2)} queries/second`
+      )
+    })
+    const drainedPromise = new Promise(resolve => {
+      queue.once(`drain`, resolve)
+    })
+
+    queryIds.map(toQueryJob).forEach(queryJob => {
+      queue.push(queryJob)
+    })
+    await drainedPromise
+  }
+}
+
+const processStaticQueries = async (queryIds, { activity, state }) => {
+  const toQueryJob = staticQueryMaker(state)
+  await processQueries(queryIds, { toQueryJob, activity })
+}
+
+const processPageQueries = async (queryIds, { activity, state }) => {
+  const toQueryJob = pageQueryMaker(state)
+  await processQueries(queryIds, { toQueryJob, activity })
+}
+
 const startDaemon = () => {
   const queue = queryQueue.create()
 
@@ -181,7 +215,7 @@ const startDaemon = () => {
     const state = store.getState()
     const makeStaticQuery = staticQueryMaker(state)
     const makePageQuery = pageQueryMaker(state)
-    const dirtyQueryIds = calcFollowupDirtyQueryIds()
+    const dirtyQueryIds = calcFollowupDirtyQueryIds(state)
     const { staticQueryIds, pageQueryIds } = categorizeQueryIds(dirtyQueryIds)
     staticQueryIds
       .map(makeStaticQuery)
@@ -208,6 +242,8 @@ const runQueries = () => {
 
 module.exports = {
   enqueueQueryId,
+  processStaticQueries,
+  processPageQueries,
   runQueries,
   calcDirtyQueryIds,
   categorizeQueryIds,
