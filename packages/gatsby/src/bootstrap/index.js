@@ -28,7 +28,7 @@ process.on(`unhandledRejection`, (reason, p) => {
   report.panic(reason)
 })
 
-const queryRunner = require(`../internal-plugins/query-runner/page-query-runner`)
+const queryRunner = require(`../internal-plugins/query-runner`)
 const {
   extractQueries,
 } = require(`../internal-plugins/query-runner/query-watcher`)

@@ -31,7 +31,7 @@ const getSslCert = require(`../utils/get-ssl-cert`)
 const slash = require(`slash`)
 const { initTracer } = require(`../utils/tracer`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
-const queryRunner = require(`../internal-plugins/query-runner/page-query-runner`)
+const queryRunner = require(`../internal-plugins/query-runner`)
 
 // const isInteractive = process.stdout.isTTY
 

@@ -17,7 +17,7 @@ const { store, emitter } = require(`../../redux/`)
 const { boundActionCreators } = require(`../../redux/actions`)
 const queryCompiler = require(`./query-compiler`).default
 const report = require(`gatsby-cli/lib/reporter`)
-const queryRunner = require(`./page-query-runner`)
+const queryRunner = require(`./index`)
 const debug = require(`debug`)(`gatsby:query-watcher`)
 
 const getQueriesSnapshot = () => {
