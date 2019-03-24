@@ -1,112 +1,10 @@
-// @flow
-
-import type { QueryJob } from "../query-runner"
-
-/**
- * Jobs of this module
- * - Ensure on bootstrap that all invalid page queries are run and report
- *   when this is done
- * - Watch for when a page's query is invalidated and re-run it.
- */
-
 const _ = require(`lodash`)
-
-const queue = require(`./query-queue`)
 const { store, emitter } = require(`../../redux`)
-
-let queuedDirtyActions = []
-
-let active = false
-let running = false
-
-const runQueriesForPathnamesQueue = new Set()
-exports.queueQueryForPathname = pathname => {
-  runQueriesForPathnamesQueue.add(pathname)
-}
-
-// Do initial run of graphql queries during bootstrap.
-// Afterwards we listen "API_RUNNING_QUEUE_EMPTY" and check
-// for dirty nodes before running queries.
-exports.runInitialQueries = async () => {
-  active = true
-  await runQueries(true)
-  return
-}
-
-const runQueries = async (initial = false) => {
-  // Don't run queries until bootstrap gets to "run graphql queries"
-  if (!active) {
-    return
-  }
-
-  // Find paths dependent on dirty nodes
-  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
-  const dirtyIds = findDirtyIds(queuedDirtyActions)
-  queuedDirtyActions = []
-
-  // Find ids without data dependencies (i.e. no queries have been run for
-  // them before) and run them.
-  const cleanIds = findIdsWithoutDataDependencies()
-
-  // Construct paths for all queries to run
-  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
-
-  // If this is the initial run, remove pathnames from `runQueriesForPathnamesQueue`
-  // if they're also not in the dirtyIds or cleanIds.
-  //
-  // We do this because the page component reducer/machine always
-  // adds pages to runQueriesForPathnamesQueue but during bootstrap
-  // we may not want to run those page queries if their data hasn't
-  // changed since the last time we ran Gatsby.
-  let diffedPathnames = [...runQueriesForPathnamesQueue]
-  if (initial) {
-    diffedPathnames = _.intersection(
-      [...runQueriesForPathnamesQueue],
-      pathnamesToRun
-    )
-  }
-
-  // Combine.
-  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
-
-  runQueriesForPathnamesQueue.clear()
-
-  // Run these paths
-  await runQueriesForPathnames(pathnamesToRun)
-  return
-}
-
-exports.runQueries = runQueries
-
-emitter.on(`CREATE_NODE`, action => {
-  queuedDirtyActions.push(action)
-})
-
-emitter.on(`DELETE_NODE`, action => {
-  queuedDirtyActions.push({ payload: action.payload })
-})
-
-const runQueuedActions = async () => {
-  if (active && !running) {
-    try {
-      running = true
-      await runQueries()
-    } finally {
-      running = false
-      if (queuedDirtyActions.length > 0) {
-        runQueuedActions()
-      }
-    }
-  }
-}
-exports.runQueuedActions = runQueuedActions
-
-// Wait until all plugins have finished running (e.g. various
-// transformer plugins) before running queries so we don't
-// query things in a 1/2 finished state.
-emitter.on(`API_RUNNING_QUEUE_EMPTY`, runQueuedActions)
+const queryQueue = require(`./query-queue`)
 
 let seenIdsWithoutDataDependencies = []
+let queuedDirtyActions = []
+const dirtyQueryIds = new Set()
 
 // Remove pages from seenIdsWithoutDataDependencies when they're deleted
 // so their query will be run again if they're created again.
@@ -116,8 +14,15 @@ emitter.on(`DELETE_PAGE`, action => {
   )
 })
 
-const findIdsWithoutDataDependencies = () => {
-  const state = store.getState()
+emitter.on(`CREATE_NODE`, action => {
+  queuedDirtyActions.push(action)
+})
+
+emitter.on(`DELETE_NODE`, action => {
+  queuedDirtyActions.push({ payload: action.payload })
+})
+
+const findIdsWithoutDataDependencies = state => {
   const allTrackedIds = _.uniq(
     _.flatten(
       _.concat(
@@ -147,59 +52,6 @@ const findIdsWithoutDataDependencies = () => {
   return notTrackedIds
 }
 
-const runQueriesForPathnames = pathnames => {
-  const staticQueries = pathnames.filter(p => p.slice(0, 4) === `sq--`)
-  const pageQueries = pathnames.filter(p => p.slice(0, 4) !== `sq--`)
-  const state = store.getState()
-
-  staticQueries.forEach(id => {
-    const staticQueryComponent = store.getState().staticQueryComponents.get(id)
-    const queryJob: QueryJob = {
-      id: staticQueryComponent.hash,
-      hash: staticQueryComponent.hash,
-      jsonName: staticQueryComponent.jsonName,
-      query: staticQueryComponent.query,
-      componentPath: staticQueryComponent.componentPath,
-      context: { path: staticQueryComponent.jsonName },
-    }
-    queue.push(queryJob)
-  })
-
-  const pages = state.pages
-  let didNotQueueItems = true
-  pageQueries.forEach(id => {
-    const page = pages.get(id)
-    if (page) {
-      didNotQueueItems = false
-      queue.push(
-        ({
-          id: page.path,
-          jsonName: page.jsonName,
-          query: store.getState().components.get(page.componentPath).query,
-          isPage: true,
-          componentPath: page.componentPath,
-          context: {
-            ...page,
-            ...page.context,
-          },
-        }: QueryJob)
-      )
-    }
-  })
-
-  if (didNotQueueItems || !pathnames || pathnames.length === 0) {
-    return Promise.resolve()
-  }
-
-  return new Promise(resolve => {
-    const onDrain = () => {
-      queue.removeListener(`drain`, onDrain)
-      resolve()
-    }
-    queue.on(`drain`, onDrain)
-  })
-}
-
 const findDirtyIds = actions => {
   const state = store.getState()
   const uniqDirties = _.uniq(
@@ -220,4 +72,146 @@ const findDirtyIds = actions => {
     }, [])
   )
   return uniqDirties
+}
+
+const calcDirtyQueryIds = () => {
+  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
+  const dirtyIds = findDirtyIds(queuedDirtyActions)
+  queuedDirtyActions = []
+
+  const cleanIds = findIdsWithoutDataDependencies(store.getState())
+
+  // Construct paths for all queries to run
+  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
+
+  // If this is the initial run, remove pathnames from `dirtyQueryIds`
+  // if they're also not in the dirtyIds or cleanIds.
+  //
+  // We do this because the page component reducer/machine always
+  // adds pages to dirtyQueryIds but during bootstrap
+  // we may not want to run those page queries if their data hasn't
+  // changed since the last time we ran Gatsby.
+  let diffedPathnames = [...dirtyQueryIds]
+  diffedPathnames = _.intersection([...dirtyQueryIds], pathnamesToRun)
+  // Combine.
+  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
+
+  dirtyQueryIds.clear()
+
+  return pathnamesToRun
+}
+
+// TODO refactor this and above
+const calcFollowupDirtyQueryIds = () => {
+  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
+  const dirtyIds = findDirtyIds(queuedDirtyActions)
+  queuedDirtyActions = []
+
+  const cleanIds = findIdsWithoutDataDependencies(store.getState())
+
+  // Construct paths for all queries to run
+  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
+
+  // If this is the initial run, remove pathnames from `dirtyQueryIds`
+  // if they're also not in the dirtyIds or cleanIds.
+  //
+  // We do this because the page component reducer/machine always
+  // adds pages to dirtyQueryIds but during bootstrap
+  // we may not want to run those page queries if their data hasn't
+  // changed since the last time we ran Gatsby.
+  let diffedPathnames = [...dirtyQueryIds]
+
+  // Combine.
+  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
+
+  dirtyQueryIds.clear()
+
+  return pathnamesToRun
+}
+
+const categorizeQueryIds = queryIds => {
+  const grouped = _.groupBy(queryIds, p => p.slice(0, 4) === `sq--`)
+  return {
+    staticQueryIds: grouped[true] || [],
+    pageQueryIds: grouped[false] || [],
+  }
+}
+
+const staticQueryToQueryJob = component => {
+  const { hash, jsonName, query, componentPath } = component
+  return {
+    id: hash,
+    hash,
+    jsonName,
+    query,
+    componentPath,
+    context: { path: jsonName },
+  }
+}
+
+const staticQueryMaker = state => queryId =>
+  staticQueryToQueryJob(state.staticQueryComponents.get(queryId))
+
+const makePageQueryJob = (page, component) => {
+  const { path, jsonName, componentPath, context } = page
+  const { query } = component
+  return {
+    id: path,
+    jsonName: jsonName,
+    query,
+    isPage: true,
+    componentPath,
+    context: {
+      ...page,
+      ...context,
+    },
+  }
+}
+
+const pageQueryMaker = state => queryId => {
+  const page = state.pages.get(queryId)
+  const component = state.components.get(page.componentPath)
+  return makePageQueryJob(page, component)
+}
+
+const startDaemon = () => {
+  const queue = queryQueue.create()
+
+  const runQueuedActions = () => {
+    const state = store.getState()
+    const makeStaticQuery = staticQueryMaker(state)
+    const makePageQuery = pageQueryMaker(state)
+    const dirtyQueryIds = calcFollowupDirtyQueryIds()
+    const { staticQueryIds, pageQueryIds } = categorizeQueryIds(dirtyQueryIds)
+    staticQueryIds
+      .map(makeStaticQuery)
+      .concat(pageQueryIds.map(makePageQuery))
+      .forEach(queryJob => {
+        queue.push(queryJob)
+      })
+  }
+  runQueuedActions()
+  // Wait until all plugins have finished running (e.g. various
+  // transformer plugins) before running queries so we don't
+  // query things in a 1/2 finished state.
+  emitter.on(`API_RUNNING_QUEUE_EMPTY`, runQueuedActions)
+  emitter.on(`QUERY_RUNNER_QUERIES_ENQUEUED`, runQueuedActions)
+}
+
+const enqueueQueryId = queryId => {
+  dirtyQueryIds.add(queryId)
+}
+
+const runQueries = () => {
+  emitter.emit(`QUERY_RUNNER_QUERIES_ENQUEUED`)
+}
+
+module.exports = {
+  enqueueQueryId,
+  runQueries,
+  calcDirtyQueryIds,
+  categorizeQueryIds,
+  staticQueryMaker,
+  pageQueryMaker,
+  startDaemon,
 }
