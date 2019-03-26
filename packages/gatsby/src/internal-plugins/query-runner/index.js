@@ -159,38 +159,41 @@ const pageQueryMaker = state => queryId => {
   return makePageQueryJob(page, component)
 }
 
-const processQueries = async (queryIds, { activity, toQueryJob }) => {
-  if (queryIds.length > 0) {
-    const startQueries = process.hrtime()
-
-    const queue = queryQueue.create()
-    queue.on(`task_finish`, () => {
-      const stats = queue.getStats()
-      activity.setStatus(
-        `${stats.total}/${stats.peak} ${(
-          stats.total / convertHrtime(process.hrtime(startQueries)).seconds
-        ).toFixed(2)} queries/second`
-      )
-    })
-    const drainedPromise = new Promise(resolve => {
-      queue.once(`drain`, resolve)
-    })
-
-    queryIds.map(toQueryJob).forEach(queryJob => {
-      queue.push(queryJob)
-    })
-    await drainedPromise
+const processQueries = async (queryJobs, { activity }) => {
+  if (queryJobs.length == 0) {
+    return
   }
+  const startQueries = process.hrtime()
+
+  const queue = queryQueue.create()
+  queue.on(`task_finish`, () => {
+    const stats = queue.getStats()
+    activity.setStatus(
+      `${stats.total}/${stats.peak} ${(
+        stats.total / convertHrtime(process.hrtime(startQueries)).seconds
+      ).toFixed(2)} queries/second`
+    )
+  })
+  const drainedPromise = new Promise(resolve => {
+    queue.once(`drain`, resolve)
+  })
+
+  queryJobs.forEach(queryJob => {
+    queue.push(queryJob)
+  })
+  await drainedPromise
 }
 
 const processStaticQueries = async (queryIds, { activity, state }) => {
   const toQueryJob = staticQueryMaker(state)
-  await processQueries(queryIds, { toQueryJob, activity })
+  const queryJobs = queryIds.map(toQueryJob)
+  await processQueries(queryJobs, { activity })
 }
 
 const processPageQueries = async (queryIds, { activity, state }) => {
   const toQueryJob = pageQueryMaker(state)
-  await processQueries(queryIds, { toQueryJob, activity })
+  const queryJobs = queryIds.map(toQueryJob)
+  await processQueries(queryJobs, { activity })
 }
 
 /////////////////////////////////////////////////////////////////////
