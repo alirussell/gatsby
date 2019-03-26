@@ -259,14 +259,17 @@ const watch = rootDir => {
     .on(`change`, path => {
       debounceCompile()
     })
+
   filesToWatch.forEach(filePath => watcher.add(filePath))
 }
 
 if (process.env.gatsby_executing_command === `develop`) {
   let bootstrapFinished = false
+
   emitter.on(`BOOTSTRAP_FINISHED`, () => {
     bootstrapFinished = true
   })
+
   emitter.on(`DELETE_PAGE`, action => {
     if (bootstrapFinished) {
       const componentPath = slash(action.payload.component)
