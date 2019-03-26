@@ -24,6 +24,13 @@ emitter.on(`DELETE_NODE`, action => {
   queuedDirtyActions.push({ payload: action.payload })
 })
 
+const enqueueQueryId = queryId => {
+  extractedQueryIds.add(queryId)
+}
+
+/////////////////////////////////////////////////////////////////////
+// Calculate dirty static/page queries
+
 const findIdsWithoutDataDependencies = state => {
   const allTrackedIds = _.uniq(
     _.flatten(
@@ -112,6 +119,9 @@ const categorizeQueryIds = queryIds => {
   }
 }
 
+/////////////////////////////////////////////////////////////////////
+// Create Query Jobs
+
 const staticQueryToQueryJob = component => {
   const { hash, jsonName, query, componentPath } = component
   return {
@@ -183,6 +193,9 @@ const processPageQueries = async (queryIds, { activity, state }) => {
   await processQueries(queryIds, { toQueryJob, activity })
 }
 
+/////////////////////////////////////////////////////////////////////
+// Background query daemon (for gatsby develop)
+
 const startDaemon = () => {
   const queue = queryQueue.create()
 
@@ -202,10 +215,6 @@ const startDaemon = () => {
   runQueuedActions()
   emitter.on(`API_RUNNING_QUEUE_EMPTY`, runQueuedActions)
   emitter.on(`QUERY_RUNNER_QUERIES_ENQUEUED`, runQueuedActions)
-}
-
-const enqueueQueryId = queryId => {
-  extractedQueryIds.add(queryId)
 }
 
 const runQueries = () => {
