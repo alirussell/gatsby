@@ -32,6 +32,7 @@ const slash = require(`slash`)
 const { initTracer } = require(`../utils/tracer`)
 const apiRunnerNode = require(`../utils/api-runner-node`)
 const queryRunner = require(`../internal-plugins/query-runner`)
+const telemetry = require(`gatsby-telemetry`)
 
 // const isInteractive = process.stdout.isTTY
 
@@ -49,6 +50,7 @@ const rlInterface = rl.createInterface({
 
 // Quit immediately on hearing ctrl-c
 rlInterface.on(`SIGINT`, () => {
+  telemetry.trackCli(`DEVELOP_STOP`)
   process.exit()
 })
 
@@ -91,6 +93,7 @@ async function startServer(program) {
    * Set up the express app.
    **/
   const app = express()
+  app.use(telemetry.expressMiddleware(`DEVELOP`))
   app.use(
     require(`webpack-hot-middleware`)(compiler, {
       log: false,
@@ -257,6 +260,7 @@ async function startServer(program) {
 
 module.exports = async (program: any) => {
   initTracer(program.openTracingConfigFile)
+  telemetry.trackCli(`DEVELOP_START`)
 
   const detect = require(`detect-port`)
   const port =
