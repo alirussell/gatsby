@@ -450,7 +450,7 @@ module.exports = async (args: BootstrapArgs) => {
     require(`./page-hot-reloader`)(graphqlRunner)
   }
 
-  const queryIds = queryRunner.calcDirtyQueryIds(store.getState())
+  const queryIds = queryRunner.calcBootstrapDirtyQueryIds(store.getState())
   const { staticQueryIds, pageQueryIds } = queryRunner.categorizeQueryIds(
     queryIds
   )

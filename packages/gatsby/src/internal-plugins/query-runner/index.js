@@ -6,7 +6,7 @@ require(`./pages-writer`)
 
 let seenIdsWithoutDataDependencies = []
 let queuedDirtyActions = []
-const dirtyQueryIds = new Set()
+const extractedQueryIds = new Set()
 
 // Remove pages from seenIdsWithoutDataDependencies when they're deleted
 // so their query will be run again if they're created again.
@@ -54,7 +54,8 @@ const findIdsWithoutDataDependencies = state => {
   return notTrackedIds
 }
 
-const findDirtyIds = (actions, { state }) => {
+const popNodeQueries = ({ state }) => {
+  const actions = _.uniq(queuedDirtyActions, a => a.payload.id)
   const uniqDirties = _.uniq(
     actions.reduce((dirtyIds, action) => {
       const node = action.payload
@@ -72,62 +73,35 @@ const findDirtyIds = (actions, { state }) => {
       return _.compact(dirtyIds)
     }, [])
   )
+  queuedDirtyActions = []
   return uniqDirties
 }
 
-const calcDirtyQueryIds = state => {
-  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
-  const dirtyIds = findDirtyIds(queuedDirtyActions, { state })
-  queuedDirtyActions = []
+const popNodeAndDepQueries = state => {
+  const nodeQueries = popNodeQueries({ state })
 
-  const cleanIds = findIdsWithoutDataDependencies(state)
+  const noDepQueries = findIdsWithoutDataDependencies(state)
 
-  // Construct paths for all queries to run
-  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
-
-  // If this is the initial run, remove pathnames from `dirtyQueryIds`
-  // if they're also not in the dirtyIds or cleanIds.
-  //
-  // We do this because the page component reducer/machine always
-  // adds pages to dirtyQueryIds but during bootstrap
-  // we may not want to run those page queries if their data hasn't
-  // changed since the last time we ran Gatsby.
-  let diffedPathnames = [...dirtyQueryIds]
-  diffedPathnames = _.intersection([...dirtyQueryIds], pathnamesToRun)
-  // Combine.
-  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
-
-  dirtyQueryIds.clear()
-
-  return pathnamesToRun
+  return _.uniq([...nodeQueries, ...noDepQueries])
 }
 
-// TODO refactor this and above
-const calcFollowupDirtyQueryIds = state => {
-  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
-  const dirtyIds = findDirtyIds(queuedDirtyActions, { state })
-  queuedDirtyActions = []
+const popExtractedQueries = () => {
+  const queries = [...extractedQueryIds]
+  extractedQueryIds.clear()
+  return queries
+}
 
-  const cleanIds = findIdsWithoutDataDependencies(state)
+const calcDirtyQueryIds = state =>
+  _.union(popNodeAndDepQueries(state), popExtractedQueries())
 
-  // Construct paths for all queries to run
-  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
+const calcBootstrapDirtyQueryIds = state => {
+  const nodeAndNoDepQueries = popNodeAndDepQueries(state)
 
-  // If this is the initial run, remove pathnames from `dirtyQueryIds`
-  // if they're also not in the dirtyIds or cleanIds.
-  //
-  // We do this because the page component reducer/machine always
-  // adds pages to dirtyQueryIds but during bootstrap
-  // we may not want to run those page queries if their data hasn't
-  // changed since the last time we ran Gatsby.
-  let diffedPathnames = [...dirtyQueryIds]
-
-  // Combine.
-  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
-
-  dirtyQueryIds.clear()
-
-  return pathnamesToRun
+  const extractedQueriesThatNeedRunning = _.intersection(
+    popExtractedQueries(),
+    nodeAndNoDepQueries
+  )
+  return _.union(extractedQueriesThatNeedRunning, nodeAndNoDepQueries)
 }
 
 const categorizeQueryIds = queryIds => {
@@ -216,7 +190,7 @@ const startDaemon = () => {
     const state = store.getState()
     const makeStaticQuery = staticQueryMaker(state)
     const makePageQuery = pageQueryMaker(state)
-    const dirtyQueryIds = calcFollowupDirtyQueryIds(state)
+    const dirtyQueryIds = calcDirtyQueryIds(state)
     const { staticQueryIds, pageQueryIds } = categorizeQueryIds(dirtyQueryIds)
     staticQueryIds
       .map(makeStaticQuery)
@@ -226,18 +200,17 @@ const startDaemon = () => {
       })
   }
   runQueuedActions()
-  // Wait until all plugins have finished running (e.g. various
-  // transformer plugins) before running queries so we don't
-  // query things in a 1/2 finished state.
   emitter.on(`API_RUNNING_QUEUE_EMPTY`, runQueuedActions)
   emitter.on(`QUERY_RUNNER_QUERIES_ENQUEUED`, runQueuedActions)
 }
 
 const enqueueQueryId = queryId => {
-  dirtyQueryIds.add(queryId)
+  extractedQueryIds.add(queryId)
 }
 
 const runQueries = () => {
+  // emitter will be ignored until `startDaemon` has been invoked
+  // (during `gatsby develop`)
   emitter.emit(`QUERY_RUNNER_QUERIES_ENQUEUED`)
 }
 
@@ -246,7 +219,7 @@ module.exports = {
   processStaticQueries,
   processPageQueries,
   runQueries,
-  calcDirtyQueryIds,
+  calcBootstrapDirtyQueryIds,
   categorizeQueryIds,
   staticQueryMaker,
   pageQueryMaker,
