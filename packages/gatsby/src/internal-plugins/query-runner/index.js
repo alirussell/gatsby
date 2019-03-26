@@ -122,7 +122,8 @@ const categorizeQueryIds = queryIds => {
 /////////////////////////////////////////////////////////////////////
 // Create Query Jobs
 
-const staticQueryToQueryJob = component => {
+const makeStaticQueryJob = (state, queryId) => {
+  const component = state.staticQueryComponents.get(queryId)
   const { hash, jsonName, query, componentPath } = component
   return {
     id: hash,
@@ -134,10 +135,9 @@ const staticQueryToQueryJob = component => {
   }
 }
 
-const staticQueryMaker = state => queryId =>
-  staticQueryToQueryJob(state.staticQueryComponents.get(queryId))
-
-const makePageQueryJob = (page, component) => {
+const makePageQueryJob = (state, queryId) => {
+  const page = state.pages.get(queryId)
+  const component = state.components.get(page.componentPath)
   const { path, jsonName, componentPath, context } = page
   const { query } = component
   return {
@@ -151,12 +151,6 @@ const makePageQueryJob = (page, component) => {
       ...context,
     },
   }
-}
-
-const pageQueryMaker = state => queryId => {
-  const page = state.pages.get(queryId)
-  const component = state.components.get(page.componentPath)
-  return makePageQueryJob(page, component)
 }
 
 const processQueries = async (queryJobs, { activity }) => {
@@ -184,18 +178,6 @@ const processQueries = async (queryJobs, { activity }) => {
   await drainedPromise
 }
 
-const processStaticQueries = async (queryIds, { activity, state }) => {
-  const toQueryJob = staticQueryMaker(state)
-  const queryJobs = queryIds.map(toQueryJob)
-  await processQueries(queryJobs, { activity })
-}
-
-const processPageQueries = async (queryIds, { activity, state }) => {
-  const toQueryJob = pageQueryMaker(state)
-  const queryJobs = queryIds.map(toQueryJob)
-  await processQueries(queryJobs, { activity })
-}
-
 /////////////////////////////////////////////////////////////////////
 // Background query daemon (for gatsby develop)
 
@@ -204,13 +186,18 @@ const startDaemon = () => {
 
   const runQueuedActions = () => {
     const state = store.getState()
-    const makeStaticQuery = staticQueryMaker(state)
-    const makePageQuery = pageQueryMaker(state)
+
     const dirtyQueryIds = calcDirtyQueryIds(state)
     const { staticQueryIds, pageQueryIds } = categorizeQueryIds(dirtyQueryIds)
+
     staticQueryIds
-      .map(makeStaticQuery)
-      .concat(pageQueryIds.map(makePageQuery))
+      .map(id => makeStaticQueryJob(state, id))
+      .forEach(queryJob => {
+        queue.push(queryJob)
+      })
+
+    pageQueryIds
+      .map(id => makePageQueryJob(state, id))
       .forEach(queryJob => {
         queue.push(queryJob)
       })
@@ -228,12 +215,11 @@ const runQueries = () => {
 
 module.exports = {
   enqueueQueryId,
-  processStaticQueries,
-  processPageQueries,
-  runQueries,
   calcBootstrapDirtyQueryIds,
   categorizeQueryIds,
-  staticQueryMaker,
-  pageQueryMaker,
+  makeStaticQueryJob,
+  makePageQueryJob,
+  processQueries,
+  runQueries,
   startDaemon,
 }

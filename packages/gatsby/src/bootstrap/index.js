@@ -450,7 +450,8 @@ module.exports = async (args: BootstrapArgs) => {
     require(`./page-hot-reloader`)(graphqlRunner)
   }
 
-  const queryIds = queryRunner.calcBootstrapDirtyQueryIds(store.getState())
+  state = store.getState()
+  const queryIds = queryRunner.calcBootstrapDirtyQueryIds(state)
   const { staticQueryIds, pageQueryIds } = queryRunner.categorizeQueryIds(
     queryIds
   )
@@ -459,20 +460,20 @@ module.exports = async (args: BootstrapArgs) => {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await queryRunner.processStaticQueries(staticQueryIds, {
-    activity,
-    state: store.getState(),
-  })
+  await queryRunner.processQueries(
+    staticQueryIds.map(id => queryRunner.makeStaticQueryJob(state, id)),
+    { activity }
+  )
   activity.end()
 
   activity = report.activityTimer(`run page queries`, {
     parentSpan: bootstrapSpan,
   })
   activity.start()
-  await queryRunner.processPageQueries(pageQueryIds, {
-    activity,
-    state: store.getState(),
-  })
+  await queryRunner.processQueries(
+    pageQueryIds.map(id => queryRunner.makePageQueryJob(state, id)),
+    { activity }
+  )
   activity.end()
 
   require(`../redux/actions`).boundActionCreators.setProgramStatus(
