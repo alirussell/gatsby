@@ -14,18 +14,23 @@ const mod = require(`hash-mod`)(999)
 
 const resultHashes = {}
 
-// type QueryJob = {
-//   id: string,
-//   hash?: string,
-//   jsonName: string,
-//   query: string,
-//   componentPath: string,
-//   context: Object,
-//   isPage: Boolean,
-// }
+type QueryJob = {
+  id: string,
+  hash?: string,
+  jsonName: string,
+  query: string,
+  componentPath: string,
+  context: Object,
+  isPage: Boolean,
+}
+
+type Args = {
+  queryJob: QueryJob,
+  component: Any,
+}
 
 // Run query
-module.exports = async ({ queryJob, component }) => {
+module.exports = async ({ queryJob, component }: Args) => {
   const { schema, program } = store.getState()
 
   const graphql = (query, context) =>
