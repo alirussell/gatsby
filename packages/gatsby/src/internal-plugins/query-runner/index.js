@@ -24,7 +24,7 @@ emitter.on(`DELETE_NODE`, action => {
   queuedDirtyActions.push({ payload: action.payload })
 })
 
-const enqueueQueryId = queryId => {
+const enqueueExtractedQueryId = queryId => {
   extractedQueryIds.add(queryId)
 }
 
@@ -214,7 +214,7 @@ const runQueries = () => {
 }
 
 module.exports = {
-  enqueueQueryId,
+  enqueueExtractedQueryId,
   calcBootstrapDirtyQueryIds,
   categorizeQueryIds,
   makeStaticQueryJob,

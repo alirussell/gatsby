@@ -86,7 +86,7 @@ const handleQuery = (
       )
 
       boundActionCreators.deleteComponentsDependencies([query.jsonName])
-      queryRunner.enqueueQueryId(query.jsonName)
+      queryRunner.enqueueExtractedQueryId(query.jsonName)
     }
     return true
   }
@@ -207,12 +207,12 @@ const queueQueriesForPageComponent = componentPath => {
   boundActionCreators.deleteComponentsDependencies(
     pages.map(p => p.path || p.id)
   )
-  pages.forEach(page => queryRunner.enqueueQueryId(page.path))
+  pages.forEach(page => queryRunner.enqueueExtractedQueryId(page.path))
   queryRunner.runQueries()
 }
 
 const runQueryForPage = path => {
-  queryRunner.enqueueQueryId(path)
+  queryRunner.enqueueExtractedQueryId(path)
   queryRunner.runQueries()
 }
 
