@@ -19,64 +19,78 @@ let queuedDirtyActions = []
 let active = false
 let running = false
 
-const runQueriesForPathnamesQueue = new Set()
-exports.queueQueryForPathname = pathname => {
-  runQueriesForPathnamesQueue.add(pathname)
+const extractedQueryIds = new Set()
+const enqueueExtractedQueryId = pathname => {
+  extractedQueryIds.add(pathname)
+}
+
+const popNodeAndDepQueries = state => {
+  const nodeQueries = popNodeQueries({ state })
+
+  const noDepQueries = findIdsWithoutDataDependencies(state)
+
+  return _.uniq([...nodeQueries, ...noDepQueries])
+}
+
+const popExtractedQueries = () => {
+  const queries = [...extractedQueryIds]
+  extractedQueryIds.clear()
+  return queries
+}
+
+/**
+ * Calculates the set of dirty query IDs (page.paths, or
+ * staticQuery.hash's). These are queries that:
+ *
+ * - depend on nodes or node collections (via
+ *   `actions.createPageDependency`) that have changed.
+ * - do NOT have node dependencies. Since all queries should return
+ *   data, then this implies that node dependencies have not been
+ *   tracked, and therefore these queries haven't been run before
+ * - have been recently extracted (see `./query-watcher.js`)
+ *
+ * Note, this function pops queries off internal queues, so it's up
+ * to the caller to reference the results
+ */
+
+const calcDirtyQueryIds = state =>
+  _.union(popNodeAndDepQueries(state), popExtractedQueries())
+
+/**
+ * Same as `calcDirtyQueryIds`, except that we only include extracted
+ * queries that depend on nodes or haven't been run yet. We do this
+ * because the page component reducer/machine always enqueues
+ * extractedQueryIds but during bootstrap we may not want to run those
+ * page queries if their data hasn't changed since the last time we
+ * ran Gatsby.
+ */
+const calcBootstrapDirtyQueryIds = state => {
+  const nodeAndNoDepQueries = popNodeAndDepQueries(state)
+
+  const extractedQueriesThatNeedRunning = _.intersection(
+    popExtractedQueries(),
+    nodeAndNoDepQueries
+  )
+  return _.union(extractedQueriesThatNeedRunning, nodeAndNoDepQueries)
+}
+
+const runQueries = async () => {
+  if (!active) {
+    return
+  }
+  const queryIds = calcDirtyQueryIds(store.getState())
+  await runQueriesForQueryIds(queryIds)
 }
 
 // Do initial run of graphql queries during bootstrap.
 // Afterwards we listen "API_RUNNING_QUEUE_EMPTY" and check
 // for dirty nodes before running queries.
-exports.runInitialQueries = async () => {
+const runInitialQueries = async () => {
   active = true
-  await runQueries(true)
+  const queryIds = calcBootstrapDirtyQueryIds(store.getState())
+  await runQueriesForQueryIds(queryIds)
   return
 }
-
-const runQueries = async (initial = false) => {
-  // Don't run queries until bootstrap gets to "run graphql queries"
-  if (!active) {
-    return
-  }
-
-  // Find paths dependent on dirty nodes
-  queuedDirtyActions = _.uniq(queuedDirtyActions, a => a.payload.id)
-  const dirtyIds = findDirtyIds(queuedDirtyActions)
-  queuedDirtyActions = []
-
-  // Find ids without data dependencies (i.e. no queries have been run for
-  // them before) and run them.
-  const cleanIds = findIdsWithoutDataDependencies()
-
-  // Construct paths for all queries to run
-  let pathnamesToRun = _.uniq([...dirtyIds, ...cleanIds])
-
-  // If this is the initial run, remove pathnames from `runQueriesForPathnamesQueue`
-  // if they're also not in the dirtyIds or cleanIds.
-  //
-  // We do this because the page component reducer/machine always
-  // adds pages to runQueriesForPathnamesQueue but during bootstrap
-  // we may not want to run those page queries if their data hasn't
-  // changed since the last time we ran Gatsby.
-  let diffedPathnames = [...runQueriesForPathnamesQueue]
-  if (initial) {
-    diffedPathnames = _.intersection(
-      [...runQueriesForPathnamesQueue],
-      pathnamesToRun
-    )
-  }
-
-  // Combine.
-  pathnamesToRun = _.union(diffedPathnames, pathnamesToRun)
-
-  runQueriesForPathnamesQueue.clear()
-
-  // Run these paths
-  await runQueriesForPathnames(pathnamesToRun)
-  return
-}
-
-exports.runQueries = runQueries
 
 emitter.on(`CREATE_NODE`, action => {
   queuedDirtyActions.push(action)
@@ -99,7 +113,6 @@ const runQueuedActions = async () => {
     }
   }
 }
-exports.runQueuedActions = runQueuedActions
 
 // Wait until all plugins have finished running (e.g. various
 // transformer plugins) before running queries so we don't
@@ -116,8 +129,7 @@ emitter.on(`DELETE_PAGE`, action => {
   )
 })
 
-const findIdsWithoutDataDependencies = () => {
-  const state = store.getState()
+const findIdsWithoutDataDependencies = state => {
   const allTrackedIds = _.uniq(
     _.flatten(
       _.concat(
@@ -147,7 +159,7 @@ const findIdsWithoutDataDependencies = () => {
   return notTrackedIds
 }
 
-const runQueriesForPathnames = pathnames => {
+const runQueriesForQueryIds = pathnames => {
   const staticQueries = pathnames.filter(p => p.slice(0, 4) === `sq--`)
   const pageQueries = pathnames.filter(p => p.slice(0, 4) !== `sq--`)
   const state = store.getState()
@@ -200,8 +212,9 @@ const runQueriesForPathnames = pathnames => {
   })
 }
 
-const findDirtyIds = actions => {
-  const state = store.getState()
+const popNodeQueries = ({ state }) => {
+  const actions = _.uniq(queuedDirtyActions, a => a.payload.id)
+
   const uniqDirties = _.uniq(
     actions.reduce((dirtyIds, action) => {
       const node = action.payload
@@ -219,5 +232,13 @@ const findDirtyIds = actions => {
       return _.compact(dirtyIds)
     }, [])
   )
+  queuedDirtyActions = []
   return uniqDirties
+}
+
+module.exports = {
+  runQueries,
+  runInitialQueries,
+  enqueueExtractedQueryId,
+  runQueuedActions,
 }
